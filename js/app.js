@@ -35,11 +35,7 @@ async function fazerLogin() {
         if (error) return Swal.fire('Erro', error.message, 'error');
         if (data && data.length) { 
             const usuario = data[0];
-            
-            // VALIDAÇÃO: Bloqueia acesso de inativos
-            if (usuario.ativo === false) {
-                return Swal.fire('Acesso Bloqueado', 'Esta conta foi inativada pela administração.', 'error');
-            }
+            if (usuario.ativo === false) return Swal.fire('Acesso Bloqueado', 'Esta conta foi inativada pela administração.', 'error');
 
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
@@ -66,7 +62,6 @@ function entrarNoSistema() {
         const roleLabel = document.getElementById('user-role-display'); 
         const adminMenu = document.getElementById('admin-menu-items');
 
-        // EXIBE NOME SE EXISTIR
         if(userNameDisplay && usuarioLogado) userNameDisplay.innerText = usuarioLogado.nome || usuarioLogado.username;
         if(userAvatar && usuarioLogado) userAvatar.innerText = (usuarioLogado.nome || usuarioLogado.username).charAt(0).toUpperCase();
 
@@ -97,19 +92,25 @@ async function atualizarSenhaPrimeiroAcesso() {
 
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
 
-// CORREÇÃO AQUI: Envia a data atual do cliente explicitamente
+// --- CORREÇÃO DE HORA NO SAVE ---
 async function registrarLog(acao, detalhe) { 
     if(usuarioLogado) {
+        // Pega a hora atual
+        const agora = new Date();
+        // Ajusta manualmente para garantir UTC-3 (Horário Brasil) na ISO string
+        // O setHours altera o objeto, então compensamos o fuso horário (offset em minutos)
+        agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
+        
         await _supabase.from('logs').insert([{
             usuario: usuarioLogado.username, 
             acao, 
             detalhe,
-            data_hora: new Date().toISOString() // Grava o horário exato do seu computador
+            data_hora: agora.toISOString() // Envia a hora local "congelada"
         }]); 
     }
 }
 
-// --- NAVEGAÇÃO & BUSCA INTELIGENTE ---
+// --- NAVEGAÇÃO ---
 function navegar(pagina) {
     try {
         if (usuarioLogado.perfil !== 'admin' && (pagina === 'logs' || pagina === 'equipe' || pagina === 'dashboard')) pagina = 'biblioteca';
@@ -154,13 +155,6 @@ function navegar(pagina) {
 
         const inputBusca = document.getElementById('global-search');
         inputBusca.value = '';
-        const placeholders = {
-            'biblioteca': '🔎 Pesquisar frases...',
-            'equipe': '🔎 Buscar membro por nome...',
-            'logs': '🔎 Buscar por ação, usuário ou detalhe...',
-            'dashboard': 'Visualização de dados (sem busca)'
-        };
-        inputBusca.placeholder = placeholders[pagina] || 'Pesquisar...';
         inputBusca.disabled = (pagina === 'dashboard');
 
     } catch (e) { console.error("Erro na navegação", e); }
