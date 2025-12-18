@@ -1,57 +1,70 @@
 let cacheEquipe = [];
+let exibindoTodos = false; // Controle para expandir/recolher a lista
 
 // --- BUSCA ESPECÍFICA ---
 function filtrarEquipe(termo) {
-    const container = document.getElementById('lista-equipe-container');
-    
-    // Se não tiver termo, mostra apenas os 5 últimos (Top Recentes)
-    if (!termo) {
-        atualizarContador(false, 5); // Mostra badge "Últimos 5"
-        renderizarListaEquipe(cacheEquipe.slice(0, 5));
+    // Se estiver pesquisando, forçamos a mostrar os resultados da busca
+    if (termo) {
+        const t = termo.toLowerCase();
+        const filtrados = cacheEquipe.filter(u => 
+            u.username.toLowerCase().includes(t) ||
+            (u.nome && u.nome.toLowerCase().includes(t)) ||
+            (u.ativo ? 'ativo' : 'inativo').includes(t) ||
+            (u.perfil === 'admin' ? 'administrador' : 'colaborador').includes(t)
+        );
+        atualizarContador(true, filtrados.length);
+        renderizarListaEquipe(filtrados, false); // False = não mostra botão "Ver Todos" na busca
         return;
     }
 
-    const t = termo.toLowerCase();
-    const filtrados = cacheEquipe.filter(u => 
-        u.username.toLowerCase().includes(t) ||
-        (u.nome && u.nome.toLowerCase().includes(t)) ||
-        (u.ativo ? 'ativo' : 'inativo').includes(t) ||
-        (u.perfil === 'admin' ? 'administrador' : 'colaborador').includes(t)
-    );
-    
-    atualizarContador(true, filtrados.length); // Mostra badge de resultados
-    renderizarListaEquipe(filtrados);
+    // Se NÃO tem busca (Visualização Padrão)
+    if (exibindoTodos) {
+        // Mostra TUDO
+        atualizarContador(false, cacheEquipe.length, true);
+        renderizarListaEquipe(cacheEquipe, false); 
+    } else {
+        // Mostra só os 5 PRIMEIROS
+        atualizarContador(false, 5, false);
+        // Só mostra o botão se tiver mais que 5 pessoas no total
+        const precisaBotao = cacheEquipe.length > 5;
+        renderizarListaEquipe(cacheEquipe.slice(0, 5), precisaBotao);
+    }
 }
 
-// Pequena função para criar um contador visual, se não existir
-function atualizarContador(isSearch, count) {
+// Controla o texto do contador lá em cima (Badge)
+function atualizarContador(isSearch, count, isFullList) {
     let badge = document.getElementById('contador-equipe');
-    // Se o badge não existir no HTML, criamos ele dinamicamente no título
     if(!badge) {
         const titulo = document.querySelector('#view-equipe h2');
         if(titulo) {
             badge = document.createElement('span');
             badge.id = 'contador-equipe';
-            badge.className = "ml-3 text-xs font-extrabold px-3 py-1 rounded-full shadow-sm border border-gray-100 align-middle";
             titulo.appendChild(badge);
         }
     }
     
     if(badge) {
-        if(!isSearch) {
-            badge.innerText = "ÚLTIMOS " + count + " ADICIONADOS";
-            badge.className = "ml-3 text-xs font-extrabold text-blue-500 bg-blue-50 px-3 py-1 rounded-full shadow-sm border border-blue-100 align-middle";
-        } else {
+        if(isSearch) {
             badge.innerText = count + " RESULTADOS";
             badge.className = "ml-3 text-xs font-extrabold text-white bg-green-500 px-3 py-1 rounded-full shadow-sm border border-green-600 align-middle";
+        } else if (isFullList) {
+            badge.innerText = "TODOS MEMBROS";
+            badge.className = "ml-3 text-xs font-extrabold text-purple-500 bg-purple-50 px-3 py-1 rounded-full shadow-sm border border-purple-100 align-middle";
+        } else {
+            badge.innerText = "ÚLTIMOS 5";
+            badge.className = "ml-3 text-xs font-extrabold text-blue-500 bg-blue-50 px-3 py-1 rounded-full shadow-sm border border-blue-100 align-middle";
         }
     }
 }
 
+function alternarVisualizacao() {
+    exibindoTodos = !exibindoTodos; // Inverte (se tava fechado, abre; se tava aberto, fecha)
+    filtrarEquipe(''); // Recarrega a lista
+}
+
 // --- CARREGAR ---
 async function carregarEquipe() {
-    // Ordena por 'created_at' decrescente para pegar os últimos adicionados primeiro
-    // Se 'created_at' não existir, tenta pelo ID (assumindo que IDs maiores são mais novos)
+    // Ordena por created_at (novos primeiro)
     const { data, error } = await _supabase
         .from('usuarios')
         .select('*')
@@ -59,17 +72,18 @@ async function carregarEquipe() {
 
     if (error) { 
         console.error("Erro equipe:", error); 
-        // Fallback: se der erro no order created_at, tenta nome ou id
-        const { data: dataB } = await _supabase.from('usuarios').select('*').order('nome', {ascending: true});
+        // Fallback: se der erro, tenta carregar sem ordem específica
+        const { data: dataB } = await _supabase.from('usuarios').select('*');
         if(dataB) { cacheEquipe = dataB; filtrarEquipe(''); return; }
         return;
     }
 
     cacheEquipe = data;
-    filtrarEquipe(''); // Chama o filtro vazio para aplicar o limite de 5
+    exibindoTodos = false; // Reseta para visualização reduzida ao recarregar
+    filtrarEquipe(''); 
 }
 
-function renderizarListaEquipe(lista) {
+function renderizarListaEquipe(lista, mostrarBotao) {
     const container = document.getElementById('lista-equipe-container');
     if (!lista.length) { container.innerHTML = '<div class="text-center text-gray-400 py-10">Nenhum membro encontrado.</div>'; return; }
 
@@ -89,8 +103,6 @@ function renderizarListaEquipe(lista) {
         const statusOnline = getStatusUsuario(u.ultimo_visto);
         const nomeExibicao = u.nome || u.username;
         const safeNome = (u.nome || '').replace(/'/g, "\\'");
-        
-        // Estilização baseada se está Ativo ou Inativo
         const opacityClass = u.ativo ? '' : 'opacity-50 grayscale';
         const badgeAtivo = u.ativo 
             ? '<span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-green-100 text-green-700 border border-green-200">Ativo</span>'
@@ -125,6 +137,28 @@ function renderizarListaEquipe(lista) {
         </tr>`;
     }).join('');
 
+    // Adiciona o Botão VER TODOS no final da tabela se necessário
+    if (mostrarBotao) {
+        html += `
+        <tr>
+            <td colspan="4" class="text-center py-4 bg-gray-50 border-t border-gray-100">
+                <button onclick="alternarVisualizacao()" class="text-blue-600 hover:text-blue-800 font-bold text-xs hover:underline flex items-center justify-center gap-2 w-full">
+                    <i class="fas fa-chevron-down"></i> Ver todos os ${cacheEquipe.length} membros
+                </button>
+            </td>
+        </tr>`;
+    } else if (exibindoTodos && !mostrarBotao && cacheEquipe.length > 5) {
+        // Se estiver vendo todos, mostra botão para recolher
+        html += `
+        <tr>
+            <td colspan="4" class="text-center py-4 bg-gray-50 border-t border-gray-100">
+                <button onclick="alternarVisualizacao()" class="text-gray-500 hover:text-gray-700 font-bold text-xs hover:underline flex items-center justify-center gap-2 w-full">
+                    <i class="fas fa-chevron-up"></i> Recolher lista
+                </button>
+            </td>
+        </tr>`;
+    }
+
     html += `</tbody></table>`;
     container.innerHTML = html;
 }
@@ -138,15 +172,14 @@ function getStatusUsuario(dataString) {
     return { color: 'bg-gray-400', label: 'Offline', textColor: 'text-gray-400' };
 }
 
-// --- CRUD ---
+// --- CRUD (Mantido Igual) ---
 function abrirModalUsuario() { 
     document.getElementById('id-user-edit').value=''; 
     document.getElementById('user-novo').value=''; 
     document.getElementById('nome-novo').value=''; 
     document.getElementById('pass-novo').value=''; 
     document.getElementById('perfil-novo').value='user';
-    document.getElementById('ativo-novo').checked = true; // Padrão Ativo
-    
+    document.getElementById('ativo-novo').checked = true; 
     document.getElementById('modal-user-title').innerHTML='Novo Membro'; 
     document.getElementById('btn-salvar-user').innerText='Criar Conta'; 
     document.getElementById('modal-usuario').classList.remove('hidden'); 
@@ -160,8 +193,7 @@ function prepararEdicaoUsuario(id, username, senha, perfil, nome, ativo) {
     document.getElementById('nome-novo').value = nome || ''; 
     document.getElementById('pass-novo').value = senha; 
     document.getElementById('perfil-novo').value = perfil || 'user';
-    document.getElementById('ativo-novo').checked = ativo; // Carrega estado
-    
+    document.getElementById('ativo-novo').checked = ativo; 
     document.getElementById('modal-user-title').innerHTML = 'Editar Perfil'; 
     document.getElementById('btn-salvar-user').innerText = 'Salvar Alterações'; 
     document.getElementById('modal-usuario').classList.remove('hidden'); 
@@ -191,13 +223,9 @@ async function salvarUsuario() {
     } catch(e) { Swal.fire('Erro', e.message, 'error'); } 
 }
 
-// --- VALIDAÇÃO DE EXCLUSÃO ---
 async function tentarDeletarUsuario(id, username, nomeExibicao) {
-    // 1. Verifica se tem Logs
     const { count: qtdLogs } = await _supabase.from('logs').select('*', { count: 'exact', head: true }).eq('usuario', username);
-    // 2. Verifica se criou Frases
     const { count: qtdFrases } = await _supabase.from('frases').select('*', { count: 'exact', head: true }).eq('revisado_por', username);
-    
     const totalVinculos = (qtdLogs || 0) + (qtdFrases || 0);
 
     if (totalVinculos > 0) {
@@ -227,7 +255,7 @@ async function tentarDeletarUsuario(id, username, nomeExibicao) {
     }
 }
 
-// (Funções auxiliares mantidas)
+// Funções Auxiliares (Backup e Gerenciadores)
 async function abrirGerenciadorMotivos() { const { data: frases } = await _supabase.from('frases').select('motivo'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.motivo || "Sem Motivo"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-motivos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-orange-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearMotivo('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-motivos').classList.remove('hidden'); }
 async function renomearMotivo(nomeAntigo) { const { value: novoNome } = await Swal.fire({title: 'Renomear Motivo', html: `Todas as frases com motivo <b>"${nomeAntigo}"</b> serão alteradas.`, input: 'text', inputValue: nomeAntigo, showCancelButton: true, confirmButtonText: 'Salvar'}); if (novoNome && novoNome !== nomeAntigo) { const nomeFormatado = formatarTextoBonito(novoNome, 'titulo'); Swal.fire({ title: 'Atualizando...', didOpen: () => Swal.showLoading() }); const { error } = await _supabase.from('frases').update({ motivo: nomeFormatado }).eq('motivo', nomeAntigo); if (!error) { registrarLog('EDITAR', `Renomeou motivo "${nomeAntigo}"`); abrirGerenciadorMotivos(); Swal.fire('Sucesso', '', 'success'); } else Swal.fire('Erro', '', 'error'); } }
 async function abrirGerenciadorDocumentos() { const { data: frases } = await _supabase.from('frases').select('documento'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.documento || "Sem Doc"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-documentos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-blue-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearDocumento('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-documentos').classList.remove('hidden'); }
