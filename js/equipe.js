@@ -2,22 +2,71 @@ let cacheEquipe = [];
 
 // --- BUSCA ESPECÍFICA ---
 function filtrarEquipe(termo) {
-    if (!termo) { renderizarListaEquipe(cacheEquipe); return; }
+    const container = document.getElementById('lista-equipe-container');
+    
+    // Se não tiver termo, mostra apenas os 5 últimos (Top Recentes)
+    if (!termo) {
+        atualizarContador(false, 5); // Mostra badge "Últimos 5"
+        renderizarListaEquipe(cacheEquipe.slice(0, 5));
+        return;
+    }
+
     const t = termo.toLowerCase();
     const filtrados = cacheEquipe.filter(u => 
         u.username.toLowerCase().includes(t) ||
         (u.nome && u.nome.toLowerCase().includes(t)) ||
-        (u.ativo ? 'ativo' : 'inativo').includes(t)
+        (u.ativo ? 'ativo' : 'inativo').includes(t) ||
+        (u.perfil === 'admin' ? 'administrador' : 'colaborador').includes(t)
     );
+    
+    atualizarContador(true, filtrados.length); // Mostra badge de resultados
     renderizarListaEquipe(filtrados);
+}
+
+// Pequena função para criar um contador visual, se não existir
+function atualizarContador(isSearch, count) {
+    let badge = document.getElementById('contador-equipe');
+    // Se o badge não existir no HTML, criamos ele dinamicamente no título
+    if(!badge) {
+        const titulo = document.querySelector('#view-equipe h2');
+        if(titulo) {
+            badge = document.createElement('span');
+            badge.id = 'contador-equipe';
+            badge.className = "ml-3 text-xs font-extrabold px-3 py-1 rounded-full shadow-sm border border-gray-100 align-middle";
+            titulo.appendChild(badge);
+        }
+    }
+    
+    if(badge) {
+        if(!isSearch) {
+            badge.innerText = "ÚLTIMOS " + count + " ADICIONADOS";
+            badge.className = "ml-3 text-xs font-extrabold text-blue-500 bg-blue-50 px-3 py-1 rounded-full shadow-sm border border-blue-100 align-middle";
+        } else {
+            badge.innerText = count + " RESULTADOS";
+            badge.className = "ml-3 text-xs font-extrabold text-white bg-green-500 px-3 py-1 rounded-full shadow-sm border border-green-600 align-middle";
+        }
+    }
 }
 
 // --- CARREGAR ---
 async function carregarEquipe() {
-    const { data, error } = await _supabase.from('usuarios').select('*').order('nome', { ascending: true });
-    if (error) { console.error("Erro equipe:", error); return; }
+    // Ordena por 'created_at' decrescente para pegar os últimos adicionados primeiro
+    // Se 'created_at' não existir, tenta pelo ID (assumindo que IDs maiores são mais novos)
+    const { data, error } = await _supabase
+        .from('usuarios')
+        .select('*')
+        .order('created_at', { ascending: false }); 
+
+    if (error) { 
+        console.error("Erro equipe:", error); 
+        // Fallback: se der erro no order created_at, tenta nome ou id
+        const { data: dataB } = await _supabase.from('usuarios').select('*').order('nome', {ascending: true});
+        if(dataB) { cacheEquipe = dataB; filtrarEquipe(''); return; }
+        return;
+    }
+
     cacheEquipe = data;
-    renderizarListaEquipe(data);
+    filtrarEquipe(''); // Chama o filtro vazio para aplicar o limite de 5
 }
 
 function renderizarListaEquipe(lista) {
@@ -152,26 +201,24 @@ async function tentarDeletarUsuario(id, username, nomeExibicao) {
     const totalVinculos = (qtdLogs || 0) + (qtdFrases || 0);
 
     if (totalVinculos > 0) {
-        // Bloqueia exclusão e sugere inativação
         Swal.fire({
             title: 'Não é possível excluir!',
-            html: `O usuário <b>${nomeExibicao}</b> possui <b>${totalVinculos} registros</b> de histórico (logs ou frases).<br><br>Para manter a integridade dos dados, você deve <b>INATIVAR</b> o usuário ao invés de excluir.`,
+            html: `O usuário <b>${nomeExibicao}</b> possui <b>${totalVinculos} registros</b>.<br>Você deve <b>INATIVAR</b> o usuário.`,
             icon: 'warning',
             showCancelButton: true,
-            confirmButtonText: 'Inativar Usuário',
+            confirmButtonText: 'Inativar',
             cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#d97706' // Laranja
+            confirmButtonColor: '#d97706'
         }).then(async (result) => {
             if (result.isConfirmed) {
                 await _supabase.from('usuarios').update({ ativo: false }).eq('id', id);
-                registrarLog('EDITAR_USER', `Inativou ${username} (Migrado de exclusão)`);
+                registrarLog('EDITAR_USER', `Inativou ${username}`);
                 carregarEquipe();
-                Swal.fire('Inativado', 'O acesso do usuário foi revogado.', 'success');
+                Swal.fire('Inativado', 'Usuário inativado.', 'success');
             }
         });
     } else {
-        // Permite excluir pois não tem histórico
-        if((await Swal.fire({title: 'Excluir permanentemente?', text: "Esse usuário não tem histórico no sistema.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sim, excluir'})).isConfirmed) {
+        if((await Swal.fire({title: 'Excluir?', text: "Sem histórico vinculado.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sim, excluir'})).isConfirmed) {
             await _supabase.from('usuarios').delete().eq('id', id);
             registrarLog('EXCLUIR_USER', username);
             carregarEquipe();
@@ -180,7 +227,7 @@ async function tentarDeletarUsuario(id, username, nomeExibicao) {
     }
 }
 
-// (Funções auxiliares do arquivo original mantidas: abrirGerenciadorMotivos, etc...)
+// (Funções auxiliares mantidas)
 async function abrirGerenciadorMotivos() { const { data: frases } = await _supabase.from('frases').select('motivo'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.motivo || "Sem Motivo"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-motivos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-orange-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearMotivo('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-motivos').classList.remove('hidden'); }
 async function renomearMotivo(nomeAntigo) { const { value: novoNome } = await Swal.fire({title: 'Renomear Motivo', html: `Todas as frases com motivo <b>"${nomeAntigo}"</b> serão alteradas.`, input: 'text', inputValue: nomeAntigo, showCancelButton: true, confirmButtonText: 'Salvar'}); if (novoNome && novoNome !== nomeAntigo) { const nomeFormatado = formatarTextoBonito(novoNome, 'titulo'); Swal.fire({ title: 'Atualizando...', didOpen: () => Swal.showLoading() }); const { error } = await _supabase.from('frases').update({ motivo: nomeFormatado }).eq('motivo', nomeAntigo); if (!error) { registrarLog('EDITAR', `Renomeou motivo "${nomeAntigo}"`); abrirGerenciadorMotivos(); Swal.fire('Sucesso', '', 'success'); } else Swal.fire('Erro', '', 'error'); } }
 async function abrirGerenciadorDocumentos() { const { data: frases } = await _supabase.from('frases').select('documento'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.documento || "Sem Doc"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-documentos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-blue-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearDocumento('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-documentos').classList.remove('hidden'); }
