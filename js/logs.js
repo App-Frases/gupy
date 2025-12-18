@@ -1,5 +1,5 @@
 let cacheLogsCompleto = [];
-let mapaUsuarios = {}; // Armazena "username" -> "nome real"
+let mapaUsuarios = {}; // Mapa para guardar "username" -> "nome"
 
 // --- BUSCA ESPECÍFICA ---
 function filtrarLogs(termo) {
@@ -13,7 +13,7 @@ function filtrarLogs(termo) {
         // Busca pelo ID, Ação, Detalhe OU pelo Nome Traduzido
         const nomeUsuario = mapaUsuarios[l.usuario] || '';
         return l.usuario.toLowerCase().includes(t) ||
-               nomeUsuario.toLowerCase().includes(t) || // Permite buscar pelo nome (ex: "Pedro")
+               nomeUsuario.toLowerCase().includes(t) ||
                l.acao.toLowerCase().includes(t) ||
                (l.detalhe && l.detalhe.toLowerCase().includes(t));
     });
@@ -23,15 +23,14 @@ function filtrarLogs(termo) {
 
 // --- CARREGAR LOGS ---
 async function carregarLogs() {
-    // 1. Busca usuários para criar o mapa de nomes
+    // 1. Busca usuários para criar o mapa de nomes (Tradução ID -> Nome)
     const { data: users } = await _supabase.from('usuarios').select('username, nome');
     if(users) {
         mapaUsuarios = {};
-        // Cria um dicionário: { "12345": "Maria Silva", "Pedro": "Pedro Gabriel" }
         users.forEach(u => mapaUsuarios[u.username] = u.nome || u.username);
     }
 
-    // 2. Busca os logs (últimos 200)
+    // 2. Busca os logs mais recentes (últimos 200)
     const { data, error } = await _supabase
         .from('logs')
         .select('*')
@@ -42,6 +41,14 @@ async function carregarLogs() {
 
     cacheLogsCompleto = data; 
     separarCategorias(data);
+    
+    // Feedback visual rápido no botão de atualizar (opcional)
+    const btn = document.getElementById('btn-refresh-logs');
+    if(btn) {
+        const original = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-check text-green-500"></i>';
+        setTimeout(() => btn.innerHTML = original, 1000);
+    }
 }
 
 function separarCategorias(todosLogs) {
@@ -76,7 +83,7 @@ function renderizarColuna(elementId, lista, tipo) {
         if(l.acao === 'COPIAR_RANK') detalheTexto = `Copiou frase ID #${l.detalhe}`;
         if(l.acao.includes('LOGIN')) detalheTexto = 'Login realizado com sucesso';
 
-        // Usa o mapa para pegar o nome. Se não achar, usa o ID mesmo.
+        // Aqui usamos o mapa para pegar o NOME REAL
         const nomeExibicao = mapaUsuarios[l.usuario] || l.usuario;
         const idExibicao = l.usuario; 
 
