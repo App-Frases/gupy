@@ -16,7 +16,6 @@ async function carregarFrases() {
         aplicarFiltros('inicio');
     } catch (e) {
         console.error("Erro ao carregar frases:", e);
-        document.getElementById('contador-resultados').innerText = "Erro";
     }
 }
 
@@ -53,18 +52,9 @@ function aplicarFiltros(origem) {
         (finalDoc ? f.documento === finalDoc : true)
     );
     
-    const cnt = document.getElementById('contador-resultados');
     const haFiltrosAtivos = termo || finalEmpresa || finalMotivo || finalDoc;
     const exibir = haFiltrosAtivos ? filtrados : filtrados.slice(0, 4);
     
-    if(!haFiltrosAtivos) { 
-        cnt.innerText = usuarioLogado.perfil === 'admin' ? "TOP 4 (GLOBAL)" : "TOP 4 (SEU RANKING)"; 
-        cnt.className = "text-xs font-extrabold text-blue-500 bg-blue-50 px-3 py-1 rounded-full"; 
-    } else { 
-        cnt.innerText = `${filtrados.length} RESULTADOS`; 
-        cnt.className = "text-xs font-extrabold text-white bg-green-500 px-3 py-1 rounded-full"; 
-    }
-
     renderizarBiblioteca(exibir); 
 }
 
@@ -80,11 +70,7 @@ function renderizarBiblioteca(lista) {
     if(!lista.length) { grid.innerHTML = '<div class="col-span-full text-center text-gray-400 py-10 font-bold">Nenhuma frase encontrada.</div>'; return; } 
     
     grid.innerHTML = lista.map(f => {
-        // --- BOTÕES DE AÇÃO ---
-        
-        // Botão COPIAR (Movido para cá)
         const btnCopiar = `<button onclick="copiarTexto(${f.id})" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-sm transition transform hover:-translate-y-0.5 flex items-center gap-2" title="Copiar"><i class="far fa-copy"></i> Copiar</button>`;
-        
         const btnEditar = `<button onclick='editarFrase(${JSON.stringify(f)})' class="bg-white border border-yellow-200 text-yellow-600 hover:bg-yellow-50 px-3 py-2 rounded-lg font-bold transition shadow-sm" title="Editar"><i class="fas fa-pen"></i></button>`;
         const btnExcluir = `<button onclick="deletarFraseBiblioteca(${f.id})" class="bg-white border border-red-200 text-red-500 hover:bg-red-50 px-3 py-2 rounded-lg font-bold transition shadow-sm" title="Excluir"><i class="fas fa-trash-alt"></i></button>`;
 
@@ -123,8 +109,6 @@ function editarFrase(f) { document.getElementById('id-frase').value = f.id; docu
 async function salvarFrase() { 
     const id = document.getElementById('id-frase').value; 
     const rawConteudo = document.getElementById('inp-conteudo').value;
-    
-    // Pequena formatação no save
     let conteudoLimpo = rawConteudo.trim();
     if(conteudoLimpo) conteudoLimpo = conteudoLimpo.charAt(0).toUpperCase() + conteudoLimpo.slice(1);
 
