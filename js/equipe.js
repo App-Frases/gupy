@@ -1,9 +1,8 @@
 let cacheEquipe = [];
-let exibindoTodos = false; // Controle para expandir/recolher a lista
+let exibindoTodos = false; 
 
 // --- BUSCA ESPECÍFICA ---
 function filtrarEquipe(termo) {
-    // Se estiver pesquisando, forçamos a mostrar os resultados da busca
     if (termo) {
         const t = termo.toLowerCase();
         const filtrados = cacheEquipe.filter(u => 
@@ -13,58 +12,45 @@ function filtrarEquipe(termo) {
             (u.perfil === 'admin' ? 'administrador' : 'colaborador').includes(t)
         );
         atualizarContador(true, filtrados.length);
-        renderizarListaEquipe(filtrados, false); // False = não mostra botão "Ver Todos" na busca
+        renderizarListaEquipe(filtrados, false); 
         return;
     }
 
-    // Se NÃO tem busca (Visualização Padrão)
     if (exibindoTodos) {
-        // Mostra TUDO
         atualizarContador(false, cacheEquipe.length, true);
         renderizarListaEquipe(cacheEquipe, false); 
     } else {
-        // Mostra só os 5 PRIMEIROS
         atualizarContador(false, 5, false);
-        // Só mostra o botão se tiver mais que 5 pessoas no total
         const precisaBotao = cacheEquipe.length > 5;
         renderizarListaEquipe(cacheEquipe.slice(0, 5), precisaBotao);
     }
 }
 
-// Controla o texto do contador lá em cima (Badge)
+// ATUALIZA O BADGE NA BARRA DE FILTROS (Novo Local)
 function atualizarContador(isSearch, count, isFullList) {
-    let badge = document.getElementById('contador-equipe');
-    if(!badge) {
-        const titulo = document.querySelector('#view-equipe h2');
-        if(titulo) {
-            badge = document.createElement('span');
-            badge.id = 'contador-equipe';
-            titulo.appendChild(badge);
-        }
-    }
-    
+    const badge = document.getElementById('contador-equipe');
     if(badge) {
+        badge.classList.remove('hidden'); // Garante que aparece
         if(isSearch) {
             badge.innerText = count + " RESULTADOS";
-            badge.className = "ml-3 text-xs font-extrabold text-white bg-green-500 px-3 py-1 rounded-full shadow-sm border border-green-600 align-middle";
+            badge.className = "ml-2 text-xs font-extrabold text-white bg-green-500 px-3 py-1 rounded-full shadow-sm border border-green-600 align-middle";
         } else if (isFullList) {
-            badge.innerText = "TODOS MEMBROS";
-            badge.className = "ml-3 text-xs font-extrabold text-purple-500 bg-purple-50 px-3 py-1 rounded-full shadow-sm border border-purple-100 align-middle";
+            badge.innerText = "TODOS";
+            badge.className = "ml-2 text-xs font-extrabold text-purple-500 bg-purple-50 px-3 py-1 rounded-full shadow-sm border border-purple-100 align-middle";
         } else {
             badge.innerText = "ÚLTIMOS 5";
-            badge.className = "ml-3 text-xs font-extrabold text-blue-500 bg-blue-50 px-3 py-1 rounded-full shadow-sm border border-blue-100 align-middle";
+            badge.className = "ml-2 text-xs font-extrabold text-blue-500 bg-blue-50 px-3 py-1 rounded-full shadow-sm border border-blue-100 align-middle";
         }
     }
 }
 
 function alternarVisualizacao() {
-    exibindoTodos = !exibindoTodos; // Inverte (se tava fechado, abre; se tava aberto, fecha)
-    filtrarEquipe(''); // Recarrega a lista
+    exibindoTodos = !exibindoTodos; 
+    filtrarEquipe(''); 
 }
 
 // --- CARREGAR ---
 async function carregarEquipe() {
-    // Ordena por created_at (novos primeiro)
     const { data, error } = await _supabase
         .from('usuarios')
         .select('*')
@@ -72,14 +58,13 @@ async function carregarEquipe() {
 
     if (error) { 
         console.error("Erro equipe:", error); 
-        // Fallback: se der erro, tenta carregar sem ordem específica
         const { data: dataB } = await _supabase.from('usuarios').select('*');
         if(dataB) { cacheEquipe = dataB; filtrarEquipe(''); return; }
         return;
     }
 
     cacheEquipe = data;
-    exibindoTodos = false; // Reseta para visualização reduzida ao recarregar
+    exibindoTodos = false; 
     filtrarEquipe(''); 
 }
 
@@ -137,7 +122,6 @@ function renderizarListaEquipe(lista, mostrarBotao) {
         </tr>`;
     }).join('');
 
-    // Adiciona o Botão VER TODOS no final da tabela se necessário
     if (mostrarBotao) {
         html += `
         <tr>
@@ -148,7 +132,6 @@ function renderizarListaEquipe(lista, mostrarBotao) {
             </td>
         </tr>`;
     } else if (exibindoTodos && !mostrarBotao && cacheEquipe.length > 5) {
-        // Se estiver vendo todos, mostra botão para recolher
         html += `
         <tr>
             <td colspan="4" class="text-center py-4 bg-gray-50 border-t border-gray-100">
@@ -172,7 +155,7 @@ function getStatusUsuario(dataString) {
     return { color: 'bg-gray-400', label: 'Offline', textColor: 'text-gray-400' };
 }
 
-// --- CRUD (Mantido Igual) ---
+// --- CRUD ---
 function abrirModalUsuario() { 
     document.getElementById('id-user-edit').value=''; 
     document.getElementById('user-novo').value=''; 
