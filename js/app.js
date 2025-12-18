@@ -92,20 +92,14 @@ async function atualizarSenhaPrimeiroAcesso() {
 
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
 
-// --- CORREÇÃO DE HORA NO SAVE ---
+// --- LOGS: SALVA NO PADRÃO UNIVERSAL (UTC) ---
 async function registrarLog(acao, detalhe) { 
     if(usuarioLogado) {
-        // Pega a hora atual
-        const agora = new Date();
-        // Ajusta manualmente para garantir UTC-3 (Horário Brasil) na ISO string
-        // O setHours altera o objeto, então compensamos o fuso horário (offset em minutos)
-        agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
-        
         await _supabase.from('logs').insert([{
             usuario: usuarioLogado.username, 
             acao, 
             detalhe,
-            data_hora: agora.toISOString() // Envia a hora local "congelada"
+            data_hora: new Date().toISOString() // Salva o momento exato em UTC
         }]); 
     }
 }
