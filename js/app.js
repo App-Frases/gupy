@@ -35,12 +35,9 @@ async function fazerLogin() {
         if (error) return Swal.fire('Erro', error.message, 'error');
         if (data && data.length) { 
             const usuario = data[0];
-            
-            // VALIDAÇÃO: Bloqueia acesso de inativos
             if (usuario.ativo === false) {
                 return Swal.fire('Acesso Bloqueado', 'Esta conta foi inativada pela administração.', 'error');
             }
-
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
             
@@ -66,7 +63,6 @@ function entrarNoSistema() {
         const roleLabel = document.getElementById('user-role-display'); 
         const adminMenu = document.getElementById('admin-menu-items');
 
-        // EXIBE NOME SE EXISTIR
         if(userNameDisplay && usuarioLogado) userNameDisplay.innerText = usuarioLogado.nome || usuarioLogado.username;
         if(userAvatar && usuarioLogado) userAvatar.innerText = (usuarioLogado.nome || usuarioLogado.username).charAt(0).toUpperCase();
 
@@ -98,7 +94,7 @@ async function atualizarSenhaPrimeiroAcesso() {
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
 async function registrarLog(acao, detalhe) { if(usuarioLogado) await _supabase.from('logs').insert([{usuario: usuarioLogado.username, acao, detalhe}]); }
 
-// --- NAVEGAÇÃO & BUSCA INTELIGENTE (ATUALIZADO) ---
+// --- NAVEGAÇÃO & BUSCA INTELIGENTE ---
 function navegar(pagina) {
     try {
         if (usuarioLogado.perfil !== 'admin' && (pagina === 'logs' || pagina === 'equipe' || pagina === 'dashboard')) pagina = 'biblioteca';
@@ -113,29 +109,23 @@ function navegar(pagina) {
         const filterBar = document.getElementById('filter-bar');
         if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
         
-        // 3. Controle dos Botões de Ação na Barra de Topo (Dynamic Action Bar)
+        // 3. Controle dos Botões de Ação na Barra de Topo
         const btnAddFrase = document.getElementById('btn-add-global');
         const btnAddMember = document.getElementById('btn-add-member');
         const btnRefresh = document.getElementById('btn-refresh-logs');
-        const cntLib = document.getElementById('contador-resultados');
-        const cntTeam = document.getElementById('contador-equipe');
 
         // Reset: Esconde tudo primeiro
         if(btnAddFrase) btnAddFrase.classList.add('hidden');
         if(btnAddMember) btnAddMember.classList.add('hidden');
         if(btnRefresh) btnRefresh.classList.add('hidden');
-        if(cntLib) cntLib.classList.add('hidden');
-        if(cntTeam) cntTeam.classList.add('hidden');
         
         // Ativa apenas o necessário para a página atual
         if (pagina === 'biblioteca') {
             if(btnAddFrase) { btnAddFrase.classList.remove('hidden'); btnAddFrase.classList.add('flex'); }
-            if(cntLib) { cntLib.classList.remove('hidden'); }
             carregarFrases();
         } 
         else if (pagina === 'equipe') {
             if(btnAddMember) { btnAddMember.classList.remove('hidden'); btnAddMember.classList.add('flex'); }
-            if(cntTeam) { cntTeam.classList.remove('hidden'); }
             carregarEquipe();
         } 
         else if (pagina === 'logs') {
