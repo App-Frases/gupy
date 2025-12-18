@@ -49,7 +49,7 @@
                 <h1 class="text-3xl font-extrabold text-gray-800 tracking-tight">Gupy Frases</h1><p class="text-base text-gray-500 mt-2 font-medium">Sistema Interno de Gestão</p>
             </div>
             <form onsubmit="event.preventDefault(); fazerLogin();">
-                <div class="mb-4"><label class="block text-sm font-bold text-gray-600 uppercase mb-1 ml-1">Usuário / ID</label><input type="text" id="login-user" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" required></div>
+                <div class="mb-4"><label class="block text-sm font-bold text-gray-600 uppercase mb-1 ml-1">Usuário</label><input type="text" id="login-user" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" required></div>
                 <div class="mb-6"><label class="block text-sm font-bold text-gray-600 uppercase mb-1 ml-1">Senha</label><input type="password" id="login-pass" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50" required></div>
                 <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transform transition hover:-translate-y-1 text-lg">Acessar Sistema</button>
             </form>
@@ -162,7 +162,6 @@
             </div>
             <div class="p-8 space-y-4">
                 <input type="hidden" id="id-user-edit">
-                
                 <div class="flex items-center justify-between bg-blue-50 p-3 rounded-xl border border-blue-100 mb-4">
                     <span class="text-xs font-extrabold text-blue-600 uppercase">Acesso ao Sistema</span>
                     <label class="relative inline-flex items-center cursor-pointer">
@@ -171,29 +170,10 @@
                         <span class="ml-3 text-xs font-bold text-gray-700" id="label-ativo">Ativo</span>
                     </label>
                 </div>
-
-                <div>
-                    <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Nome do Colaborador</label>
-                    <input id="nome-novo" type="text" placeholder="Ex: Maria Silva" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition">
-                </div>
-
-                <div>
-                    <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Login (ID)</label>
-                    <input id="user-novo" type="text" placeholder="Ex: 1040481" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition">
-                </div>
-
-                <div>
-                    <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Senha</label>
-                    <input id="pass-novo" type="text" placeholder="Senha Inicial" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition">
-                </div>
-                
-                <div>
-                    <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Perfil</label>
-                    <select id="perfil-novo" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition cursor-pointer">
-                        <option value="user">👤 Colaborador</option>
-                        <option value="admin">🔑 Administrador</option>
-                    </select>
-                </div>
+                <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Nome do Colaborador</label><input id="nome-novo" type="text" placeholder="Ex: Maria Silva" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition"></div>
+                <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Login (ID)</label><input id="user-novo" type="text" placeholder="Ex: 1040481" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition"></div>
+                <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Senha</label><input id="pass-novo" type="text" placeholder="Senha Inicial" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition"></div>
+                <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Perfil</label><select id="perfil-novo" class="w-full p-3 border rounded-xl text-sm font-semibold bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-100 outline-none transition cursor-pointer"><option value="user">👤 Colaborador</option><option value="admin">🔑 Administrador</option></select></div>
             </div>
             <div class="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-3">
                 <button onclick="fecharModalUsuario()" class="px-6 py-2.5 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-200 transition">Cancelar</button>
@@ -205,37 +185,20 @@
     <div id="modal-motivos" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden modal-content flex flex-col max-h-[85vh]">
             <div class="bg-orange-50 px-8 py-5 border-b border-orange-100 flex justify-between items-center shrink-0">
-                <div>
-                    <h3 class="text-xl font-extrabold text-orange-800 flex items-center gap-2"><i class="fas fa-tags"></i> Organizar Motivos</h3>
-                    <p class="text-xs text-orange-600 mt-1">Mescle duplicatas renomeando-as para o mesmo nome.</p>
-                </div>
+                <div><h3 class="text-xl font-extrabold text-orange-800 flex items-center gap-2"><i class="fas fa-tags"></i> Organizar Motivos</h3><p class="text-xs text-orange-600 mt-1">Mescle duplicatas.</p></div>
                 <button onclick="document.getElementById('modal-motivos').classList.add('hidden')" class="text-orange-400 hover:text-orange-600 transition text-xl"><i class="fas fa-times"></i></button>
             </div>
-            <div class="p-0 overflow-y-auto flex-1 bg-white">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-50 text-gray-500 font-bold border-b border-gray-100 sticky top-0"><tr><th class="px-6 py-3">Nome do Motivo</th><th class="px-6 py-3 text-center">Qtd.</th><th class="px-6 py-3 text-right">Ação</th></tr></thead>
-                    <tbody id="lista-motivos-unificacao" class="divide-y divide-gray-100"></tbody>
-                </table>
-            </div>
+            <div class="p-0 overflow-y-auto flex-1 bg-white"><table class="w-full text-left text-sm"><tbody id="lista-motivos-unificacao" class="divide-y divide-gray-100"></tbody></table></div>
             <div class="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-end shrink-0"><button onclick="document.getElementById('modal-motivos').classList.add('hidden'); carregarFrases();" class="bg-white border border-gray-300 hover:bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold transition">Fechar e Atualizar</button></div>
         </div>
     </div>
-
     <div id="modal-documentos" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden modal-content flex flex-col max-h-[85vh]">
             <div class="bg-blue-50 px-8 py-5 border-b border-blue-100 flex justify-between items-center shrink-0">
-                <div>
-                    <h3 class="text-xl font-extrabold text-blue-800 flex items-center gap-2"><i class="fas fa-file-alt"></i> Organizar Docs</h3>
-                    <p class="text-xs text-blue-600 mt-1">Padronize nomes de documentos (Ex: RG, R.G.).</p>
-                </div>
+                <div><h3 class="text-xl font-extrabold text-blue-800 flex items-center gap-2"><i class="fas fa-file-alt"></i> Organizar Docs</h3><p class="text-xs text-blue-600 mt-1">Padronize nomes.</p></div>
                 <button onclick="document.getElementById('modal-documentos').classList.add('hidden')" class="text-blue-400 hover:text-blue-600 transition text-xl"><i class="fas fa-times"></i></button>
             </div>
-            <div class="p-0 overflow-y-auto flex-1 bg-white">
-                <table class="w-full text-left text-sm">
-                    <thead class="bg-gray-50 text-gray-500 font-bold border-b border-gray-100 sticky top-0"><tr><th class="px-6 py-3">Nome do Documento</th><th class="px-6 py-3 text-center">Qtd.</th><th class="px-6 py-3 text-right">Ação</th></tr></thead>
-                    <tbody id="lista-documentos-unificacao" class="divide-y divide-gray-100"></tbody>
-                </table>
-            </div>
+            <div class="p-0 overflow-y-auto flex-1 bg-white"><table class="w-full text-left text-sm"><tbody id="lista-documentos-unificacao" class="divide-y divide-gray-100"></tbody></table></div>
             <div class="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-end shrink-0"><button onclick="document.getElementById('modal-documentos').classList.add('hidden'); carregarFrases();" class="bg-white border border-gray-300 hover:bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold transition">Fechar e Atualizar</button></div>
         </div>
     </div>
@@ -293,7 +256,13 @@
                 <select id="filtro-doc" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-gray-200 bg-white text-xs font-bold text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none cursor-pointer hover:bg-gray-50 transition shadow-sm"><option value="">📄 Todos Documentos</option></select>
                 <button onclick="limparFiltros()" class="text-xs font-bold text-red-400 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition" title="Limpar Filtros"><i class="fas fa-times mr-1"></i> Limpar</button>
                 <div class="w-px h-6 bg-gray-200 mx-2 shrink-0"></div>
+                
+                <span id="contador-resultados" class="hidden text-xs font-extrabold text-gray-400 uppercase tracking-wider bg-white px-3 py-1 rounded-full shadow-sm border border-gray-100">Carregando...</span>
+                <span id="contador-equipe" class="hidden text-xs font-extrabold text-gray-400 uppercase tracking-wider bg-white px-3 py-1 rounded-full shadow-sm border border-gray-100"></span>
+
                 <button id="btn-add-global" onclick="abrirModalFrase()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-plus"></i> Nova Frase</button>
+                <button id="btn-add-member" onclick="abrirModalUsuario()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-user-plus"></i> Novo Membro</button>
+                <button id="btn-refresh-logs" onclick="carregarLogs()" class="hidden bg-white border border-gray-200 text-gray-600 hover:text-blue-600 px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm transition items-center gap-2"><i class="fas fa-sync-alt"></i> Atualizar</button>
             </div>
         </div>
 
@@ -301,10 +270,6 @@
             <div class="container mx-auto max-w-7xl h-full flex flex-col">
                 
                 <section id="view-biblioteca" class="view-section flex-grow">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-xl font-extrabold text-gray-800 flex items-center gap-2" id="page-title"><i class="fas fa-book-open text-blue-500 opacity-80"></i> Biblioteca</h2>
-                        <span id="contador-resultados" class="text-xs font-extrabold text-gray-400 uppercase tracking-wider bg-white px-3 py-1 rounded-full shadow-sm border border-gray-100">Carregando...</span>
-                    </div>
                     <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full pb-20"></div>
                 </section>
 
@@ -323,56 +288,19 @@
                 </section>
 
                 <section id="view-logs" class="view-section hidden flex-grow space-y-6">
-                    <div class="flex justify-between items-center mb-2">
-                        <div>
-                            <h2 class="text-xl font-extrabold text-gray-800 flex items-center gap-2">
-                                <i class="fas fa-history text-blue-500"></i> Centro de Atividade
-                            </h2>
-                            <p class="text-xs text-gray-500 font-bold mt-1">Monitoramento em tempo real das últimas ações.</p>
-                        </div>
-                        <button onclick="carregarLogs()" class="bg-white border border-gray-200 text-gray-600 hover:text-blue-600 px-4 py-2 rounded-xl text-xs font-bold shadow-sm transition flex items-center gap-2">
-                            <i class="fas fa-sync-alt"></i> Atualizar Agora
-                        </button>
-                    </div>
-
                     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full pb-10">
-                        
                         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                            <div class="bg-green-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center">
-                                <h3 class="font-extrabold text-green-700 text-sm flex items-center gap-2">
-                                    <i class="fas fa-shield-alt"></i> Acessos & Segurança
-                                </h3>
-                                <span class="text-[10px] font-bold bg-white text-green-600 px-2 py-1 rounded border border-green-100 shadow-sm">Últimos 10</span>
-                            </div>
-                            <div id="col-acessos" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]">
-                                <p class="text-center text-gray-300 text-xs py-10">Carregando...</p>
-                            </div>
+                            <div class="bg-green-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center"><h3 class="font-extrabold text-green-700 text-sm flex items-center gap-2"><i class="fas fa-shield-alt"></i> Acessos & Segurança</h3><span class="text-[10px] font-bold bg-white text-green-600 px-2 py-1 rounded border border-green-100 shadow-sm">Últimos 10</span></div>
+                            <div id="col-acessos" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]"><p class="text-center text-gray-300 text-xs py-10">Carregando...</p></div>
                         </div>
-
                         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                            <div class="bg-blue-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center">
-                                <h3 class="font-extrabold text-blue-700 text-sm flex items-center gap-2">
-                                    <i class="fas fa-rocket"></i> Produtividade (Uso)
-                                </h3>
-                                <span class="text-[10px] font-bold bg-white text-blue-600 px-2 py-1 rounded border border-blue-100 shadow-sm">Últimos 10</span>
-                            </div>
-                            <div id="col-uso" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]">
-                                <p class="text-center text-gray-300 text-xs py-10">Carregando...</p>
-                            </div>
+                            <div class="bg-blue-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center"><h3 class="font-extrabold text-blue-700 text-sm flex items-center gap-2"><i class="fas fa-rocket"></i> Produtividade (Uso)</h3><span class="text-[10px] font-bold bg-white text-blue-600 px-2 py-1 rounded border border-blue-100 shadow-sm">Últimos 10</span></div>
+                            <div id="col-uso" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]"><p class="text-center text-gray-300 text-xs py-10">Carregando...</p></div>
                         </div>
-
                         <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                            <div class="bg-orange-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center">
-                                <h3 class="font-extrabold text-orange-700 text-sm flex items-center gap-2">
-                                    <i class="fas fa-tools"></i> Auditoria & Gestão
-                                </h3>
-                                <span class="text-[10px] font-bold bg-white text-orange-600 px-2 py-1 rounded border border-orange-100 shadow-sm">Últimos 10</span>
-                            </div>
-                            <div id="col-auditoria" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]">
-                                <p class="text-center text-gray-300 text-xs py-10">Carregando...</p>
-                            </div>
+                            <div class="bg-orange-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center"><h3 class="font-extrabold text-orange-700 text-sm flex items-center gap-2"><i class="fas fa-tools"></i> Auditoria & Gestão</h3><span class="text-[10px] font-bold bg-white text-orange-600 px-2 py-1 rounded border border-orange-100 shadow-sm">Últimos 10</span></div>
+                            <div id="col-auditoria" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]"><p class="text-center text-gray-300 text-xs py-10">Carregando...</p></div>
                         </div>
-
                     </div>
                 </section>
 
@@ -389,20 +317,6 @@
                         <div onclick="padronizarTodasFrases()" class="bg-white p-6 rounded-2xl shadow-sm border border-purple-100 cursor-pointer hover:shadow-md transition flex items-center gap-4 group">
                             <div class="w-12 h-12 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-magic"></i></div>
                             <div><h4 class="font-bold text-gray-700">Padronização Mágica</h4><p class="text-xs text-gray-400">Limpar formatação</p></div>
-                        </div>
-                    </div>
-
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-xl font-extrabold text-gray-800 flex items-center gap-2">
-                            <i class="fas fa-users text-blue-500"></i> Gestão de Membros
-                        </h2>
-                        <div class="flex gap-2">
-                            <button onclick="abrirModalUsuario()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition flex items-center gap-2">
-                                <i class="fas fa-user-plus"></i> Novo Membro
-                            </button>
-                            <button onclick="carregarEquipe()" class="text-blue-600 text-xs font-bold hover:underline bg-blue-50 px-3 py-2 rounded-lg">
-                                <i class="fas fa-sync"></i>
-                            </button>
                         </div>
                     </div>
 
