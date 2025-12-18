@@ -98,27 +98,52 @@ async function atualizarSenhaPrimeiroAcesso() {
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
 async function registrarLog(acao, detalhe) { if(usuarioLogado) await _supabase.from('logs').insert([{usuario: usuarioLogado.username, acao, detalhe}]); }
 
-// --- NAVEGAÇÃO & BUSCA INTELIGENTE ---
+// --- NAVEGAÇÃO & BUSCA INTELIGENTE (ATUALIZADO) ---
 function navegar(pagina) {
     try {
         if (usuarioLogado.perfil !== 'admin' && (pagina === 'logs' || pagina === 'equipe' || pagina === 'dashboard')) pagina = 'biblioteca';
         abaAtiva = pagina;
         
-        // Controle de Visibilidade
+        // 1. Controle de Visibilidade das Seções
         document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); 
         const targetView = document.getElementById(`view-${pagina}`);
         if(targetView) targetView.classList.remove('hidden');
         
-        // Controle da Barra de Filtros
+        // 2. Controle da Barra de Filtros
         const filterBar = document.getElementById('filter-bar');
-        if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca');
+        if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
         
-        // Botão Nova Frase: Só aparece na Biblioteca
-        const btnAddGlobal = document.getElementById('btn-add-global');
-        if(btnAddGlobal) { 
-            const deveAparecer = pagina === 'biblioteca';
-            btnAddGlobal.classList.toggle('hidden', !deveAparecer); 
-            btnAddGlobal.classList.toggle('flex', deveAparecer); 
+        // 3. Controle dos Botões de Ação na Barra de Topo (Dynamic Action Bar)
+        const btnAddFrase = document.getElementById('btn-add-global');
+        const btnAddMember = document.getElementById('btn-add-member');
+        const btnRefresh = document.getElementById('btn-refresh-logs');
+        const cntLib = document.getElementById('contador-resultados');
+        const cntTeam = document.getElementById('contador-equipe');
+
+        // Reset: Esconde tudo primeiro
+        if(btnAddFrase) btnAddFrase.classList.add('hidden');
+        if(btnAddMember) btnAddMember.classList.add('hidden');
+        if(btnRefresh) btnRefresh.classList.add('hidden');
+        if(cntLib) cntLib.classList.add('hidden');
+        if(cntTeam) cntTeam.classList.add('hidden');
+        
+        // Ativa apenas o necessário para a página atual
+        if (pagina === 'biblioteca') {
+            if(btnAddFrase) { btnAddFrase.classList.remove('hidden'); btnAddFrase.classList.add('flex'); }
+            if(cntLib) { cntLib.classList.remove('hidden'); }
+            carregarFrases();
+        } 
+        else if (pagina === 'equipe') {
+            if(btnAddMember) { btnAddMember.classList.remove('hidden'); btnAddMember.classList.add('flex'); }
+            if(cntTeam) { cntTeam.classList.remove('hidden'); }
+            carregarEquipe();
+        } 
+        else if (pagina === 'logs') {
+            if(btnRefresh) { btnRefresh.classList.remove('hidden'); btnRefresh.classList.add('flex'); }
+            carregarLogs();
+        } 
+        else if (pagina === 'dashboard') {
+            carregarDashboard();
         }
 
         // --- BUSCA CONTEXTUAL ---
@@ -133,12 +158,6 @@ function navegar(pagina) {
         };
         inputBusca.placeholder = placeholders[pagina] || 'Pesquisar...';
         inputBusca.disabled = (pagina === 'dashboard');
-
-        // Carrega Dados
-        if(pagina==='biblioteca') carregarFrases(); 
-        else if(pagina==='equipe') carregarEquipe(); 
-        else if(pagina==='logs') carregarLogs(); 
-        else if(pagina==='dashboard') carregarDashboard();
 
     } catch (e) { console.error("Erro na navegação", e); }
 }
