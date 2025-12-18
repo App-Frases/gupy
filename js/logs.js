@@ -1,5 +1,5 @@
 let cacheLogsCompleto = [];
-let mapaUsuarios = {};
+let mapaUsuarios = {}; 
 
 // --- BUSCA ESPECÍFICA ---
 function filtrarLogs(termo) {
@@ -72,15 +72,11 @@ function renderizarColuna(elementId, lista, tipo) {
     container.innerHTML = lista.map(l => {
         const estilo = getEstiloCard(tipo);
         
-        // --- CORREÇÃO DE DATA DE EXIBIÇÃO ---
-        // Remove o 'Z' do final para o navegador não converter o fuso novamente
-        // E cria o objeto Date considerando que a string já está na hora certa
-        let dataLimpa = l.data_hora;
-        if(typeof dataLimpa === 'string' && dataLimpa.endsWith('Z')) {
-            dataLimpa = dataLimpa.slice(0, -1); 
-        }
+        // --- CORREÇÃO DE DATA DEFINITIVA ---
+        // Cria o objeto de data usando a string do banco
+        const dataObj = new Date(l.data_hora);
         
-        const dataObj = new Date(dataLimpa);
+        // Converte para o horário local do navegador do usuário
         const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         const dataFormatada = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         
