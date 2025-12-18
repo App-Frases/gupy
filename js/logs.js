@@ -1,5 +1,5 @@
 let cacheLogsCompleto = [];
-let mapaUsuarios = {}; // Mapa para guardar "username" -> "nome"
+let mapaUsuarios = {};
 
 // --- BUSCA ESPECÍFICA ---
 function filtrarLogs(termo) {
@@ -10,7 +10,6 @@ function filtrarLogs(termo) {
 
     const t = termo.toLowerCase();
     const filtrados = cacheLogsCompleto.filter(l => {
-        // Busca pelo ID, Ação, Detalhe OU pelo Nome Traduzido
         const nomeUsuario = mapaUsuarios[l.usuario] || '';
         return l.usuario.toLowerCase().includes(t) ||
                nomeUsuario.toLowerCase().includes(t) ||
@@ -23,14 +22,12 @@ function filtrarLogs(termo) {
 
 // --- CARREGAR LOGS ---
 async function carregarLogs() {
-    // 1. Busca usuários para criar o mapa de nomes
     const { data: users } = await _supabase.from('usuarios').select('username, nome');
     if(users) {
         mapaUsuarios = {};
         users.forEach(u => mapaUsuarios[u.username] = u.nome || u.username);
     }
 
-    // 2. Busca os logs
     const { data, error } = await _supabase
         .from('logs')
         .select('*')
@@ -42,7 +39,6 @@ async function carregarLogs() {
     cacheLogsCompleto = data; 
     separarCategorias(data);
     
-    // Feedback visual
     const btn = document.getElementById('btn-refresh-logs');
     if(btn) {
         const original = btn.innerHTML;
@@ -76,8 +72,15 @@ function renderizarColuna(elementId, lista, tipo) {
     container.innerHTML = lista.map(l => {
         const estilo = getEstiloCard(tipo);
         
-        // CORREÇÃO DE DATA: Cria um objeto Date e converte para local
-        const dataObj = new Date(l.data_hora);
+        // --- CORREÇÃO DE DATA DE EXIBIÇÃO ---
+        // Remove o 'Z' do final para o navegador não converter o fuso novamente
+        // E cria o objeto Date considerando que a string já está na hora certa
+        let dataLimpa = l.data_hora;
+        if(typeof dataLimpa === 'string' && dataLimpa.endsWith('Z')) {
+            dataLimpa = dataLimpa.slice(0, -1); 
+        }
+        
+        const dataObj = new Date(dataLimpa);
         const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
         const dataFormatada = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         
@@ -85,7 +88,6 @@ function renderizarColuna(elementId, lista, tipo) {
         if(l.acao === 'COPIAR_RANK') detalheTexto = `Copiou frase ID #${l.detalhe}`;
         if(l.acao.includes('LOGIN')) detalheTexto = 'Login realizado com sucesso';
 
-        // Usa o mapa para pegar o nome
         const nomeExibicao = mapaUsuarios[l.usuario] || l.usuario;
         const idExibicao = l.usuario; 
 
