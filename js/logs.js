@@ -23,14 +23,14 @@ function filtrarLogs(termo) {
 
 // --- CARREGAR LOGS ---
 async function carregarLogs() {
-    // 1. Busca usuários para criar o mapa de nomes (Tradução ID -> Nome)
+    // 1. Busca usuários para criar o mapa de nomes
     const { data: users } = await _supabase.from('usuarios').select('username, nome');
     if(users) {
         mapaUsuarios = {};
         users.forEach(u => mapaUsuarios[u.username] = u.nome || u.username);
     }
 
-    // 2. Busca os logs mais recentes (últimos 200)
+    // 2. Busca os logs
     const { data, error } = await _supabase
         .from('logs')
         .select('*')
@@ -42,7 +42,7 @@ async function carregarLogs() {
     cacheLogsCompleto = data; 
     separarCategorias(data);
     
-    // Feedback visual rápido no botão de atualizar (opcional)
+    // Feedback visual
     const btn = document.getElementById('btn-refresh-logs');
     if(btn) {
         const original = btn.innerHTML;
@@ -75,15 +75,17 @@ function renderizarColuna(elementId, lista, tipo) {
 
     container.innerHTML = lista.map(l => {
         const estilo = getEstiloCard(tipo);
-        const data = new Date(l.data_hora);
-        const horaFormatada = data.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        const dataFormatada = data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        
+        // CORREÇÃO DE DATA: Cria um objeto Date e converte para local
+        const dataObj = new Date(l.data_hora);
+        const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+        const dataFormatada = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         
         let detalheTexto = l.detalhe || '';
         if(l.acao === 'COPIAR_RANK') detalheTexto = `Copiou frase ID #${l.detalhe}`;
         if(l.acao.includes('LOGIN')) detalheTexto = 'Login realizado com sucesso';
 
-        // Aqui usamos o mapa para pegar o NOME REAL
+        // Usa o mapa para pegar o nome
         const nomeExibicao = mapaUsuarios[l.usuario] || l.usuario;
         const idExibicao = l.usuario; 
 
