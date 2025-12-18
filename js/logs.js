@@ -1,5 +1,5 @@
 let cacheLogsCompleto = [];
-let mapaUsuarios = {}; // Mapa para guardar "username" -> "nome"
+let mapaUsuarios = {}; // Armazena "username" -> "nome real"
 
 // --- BUSCA ESPECÍFICA ---
 function filtrarLogs(termo) {
@@ -13,7 +13,7 @@ function filtrarLogs(termo) {
         // Busca pelo ID, Ação, Detalhe OU pelo Nome Traduzido
         const nomeUsuario = mapaUsuarios[l.usuario] || '';
         return l.usuario.toLowerCase().includes(t) ||
-               nomeUsuario.toLowerCase().includes(t) ||
+               nomeUsuario.toLowerCase().includes(t) || // Permite buscar pelo nome (ex: "Pedro")
                l.acao.toLowerCase().includes(t) ||
                (l.detalhe && l.detalhe.toLowerCase().includes(t));
     });
@@ -27,10 +27,11 @@ async function carregarLogs() {
     const { data: users } = await _supabase.from('usuarios').select('username, nome');
     if(users) {
         mapaUsuarios = {};
+        // Cria um dicionário: { "12345": "Maria Silva", "Pedro": "Pedro Gabriel" }
         users.forEach(u => mapaUsuarios[u.username] = u.nome || u.username);
     }
 
-    // 2. Busca os logs
+    // 2. Busca os logs (últimos 200)
     const { data, error } = await _supabase
         .from('logs')
         .select('*')
@@ -75,7 +76,7 @@ function renderizarColuna(elementId, lista, tipo) {
         if(l.acao === 'COPIAR_RANK') detalheTexto = `Copiou frase ID #${l.detalhe}`;
         if(l.acao.includes('LOGIN')) detalheTexto = 'Login realizado com sucesso';
 
-        // Aqui usamos o mapa para pegar o nome
+        // Usa o mapa para pegar o nome. Se não achar, usa o ID mesmo.
         const nomeExibicao = mapaUsuarios[l.usuario] || l.usuario;
         const idExibicao = l.usuario; 
 
