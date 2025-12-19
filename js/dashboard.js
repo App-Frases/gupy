@@ -8,89 +8,87 @@ function fecharModalDashboard() {
     document.getElementById('modal-dashboard-detail').classList.add('hidden'); 
 }
 
-// --- CARREGAMENTO OTIMIZADO E CORRIGIDO ---
+// --- CARREGAMENTO OTIMIZADO ---
 async function carregarDashboard() {
     const noventaDiasAtrasData = new Date();
     noventaDiasAtrasData.setDate(noventaDiasAtrasData.getDate() - 90);
     const dataCorteISO = noventaDiasAtrasData.toISOString();
 
     try {
-        // 1. Busca Logs Recentes
+        // 1. Busca dados do Banco
         const { data: recentLogs, error: errLogs } = await _supabase
             .from('logs')
             .select('*')
             .gte('data_hora', dataCorteISO);
 
-        // 2. Busca Usuários e Frases
         const { data: users, error: errUsers } = await _supabase.from('usuarios').select('*');
         const { data: phrases, error: errPhrases } = await _supabase.from('frases').select('*');
         
-        if (errLogs || errUsers || errPhrases) throw new Error("Falha ao buscar dados");
+        if (errLogs || errUsers || errPhrases) throw new Error("Falha ao buscar dados do Dashboard");
 
-        // --- CORREÇÃO DE CONTAGEM E ATIVIDADE ---
+        // 2. Processamento Inteligente com Mapas (O(N) em vez de O(N^2))
+        const usoFrasesMap = {}; // ID da frase -> Quantidade de usos
+        const copiasPorUsuarioMap = {}; // Username -> Quantidade de cópias
+        const usuariosComAtividade = new Set();
+        
+        let totalCopias = 0;
+        let totalEdicoes = 0;
 
-        // Lista de quem está ATIVO de verdade (apareceu nos logs recentemente)
-        const usuariosComAtividadeRecente = new Set(recentLogs.map(l => l.usuario));
+        recentLogs.forEach(log => {
+            const acao = log.acao ? log.acao.toUpperCase() : '';
+            const detalhe = log.detalhe ? String(log.detalhe) : '';
+            const usuario = log.usuario;
 
-        // KPI 1: Usuários Ativos
-        // Conta quem tem log recente
-        const qtdUsuariosAtivos = usuariosComAtividadeRecente.size;
+            // Marca usuário como ativo
+            usuariosComAtividade.add(usuario);
 
-        // KPI 2: Cópias (Busca robusta por qualquer variação de COPIAR)
-        const logsCopias = recentLogs.filter(l => l.acao && l.acao.toUpperCase().includes('COPIAR'));
-        const qtdCopias = logsCopias.length;
+            // Analisa Cópias
+            if (acao.includes('COPIAR')) {
+                totalCopias++;
+                copiasPorUsuarioMap[usuario] = (copiasPorUsuarioMap[usuario] || 0) + 1;
 
-        // KPI 3: Edições
-        const qtdEdicoes = recentLogs.filter(l => 
-            l.acao && (l.acao.includes('CRIAR') || l.acao.includes('EDITAR'))
-        ).length;
+                // Extração Segura do ID:
+                // Se o detalhe for "15", "#15", "Frase 15", o replace pega só o 15.
+                const idExtraido = detalhe.replace(/\D/g, ''); 
+                
+                if (idExtraido) {
+                    usoFrasesMap[idExtraido] = (usoFrasesMap[idExtraido] || 0) + 1;
+                }
+            }
 
-        // Atualiza números na tela
-        animateValue('kpi-users', parseInt(document.getElementById('kpi-users').innerText || 0), qtdUsuariosAtivos, 1000);
-        animateValue('kpi-copies', parseInt(document.getElementById('kpi-copies').innerText || 0), qtdCopias, 1000);
-        animateValue('kpi-edits', parseInt(document.getElementById('kpi-edits').innerText || 0), qtdEdicoes, 1000);
+            // Analisa Edições
+            if (acao.includes('CRIAR') || acao.includes('EDITAR') || acao.includes('EXCLUIR')) {
+                totalEdicoes++;
+            }
+        });
 
-        // --- CÁLCULO DE ESTATÍSTICAS ---
-
-        // 1. Ranking de Usuários
+        // 3. Monta Estatísticas de Usuários
         const statsU = users.map(u => ({
             username: u.username,
             nome: u.nome || u.username,
-            // Conta quantas cópias esse usuário fez exatamente
-            copias: logsCopias.filter(l => l.usuario === u.username).length
+            copias: copiasPorUsuarioMap[u.username] || 0
         })).sort((a, b) => b.copias - a.copias);
 
-        // 2. Ranking de Frases (CORREÇÃO CRÍTICA DO ID)
-        const statsF = phrases.map(f => {
-            const usos = logsCopias.filter(l => {
-                const detalheLog = String(l.detalhe || '').trim(); // Converte log para string (ex: "15")
-                const idFrase = String(f.id); // ID da frase (ex: "15")
-                
-                // Verifica 3 cenários:
-                // A) O log é exatamente o ID (ex: "15") - Padrão novo
-                // B) O log contém o ID com hashtag (ex: "#15") - Padrão visual
-                // C) O log contém o texto da frase (ex: "Candidato reprovado...") - Legado
-                
-                const matchID = detalheLog === idFrase;
-                const matchTag = detalheLog.includes(`#${idFrase}`);
-                // Match texto: só verifica se o detalhe é longo (>10 chars) para evitar falso positivo com números
-                const matchTexto = detalheLog.length > 10 && detalheLog.includes(f.conteudo.substring(0, 20));
+        // 4. Monta Estatísticas de Frases
+        const statsF = phrases.map(f => ({
+            ...f,
+            usos: usoFrasesMap[f.id] || 0
+        })).sort((a, b) => b.usos - a.usos);
 
-                return matchID || matchTag || matchTexto;
-            }).length;
-            
-            return { ...f, usos };
-        }).sort((a, b) => b.usos - a.usos);
-
-        // 3. Ghosts (CORREÇÃO: Dupla verificação)
+        // 5. Detecta Usuários Fantasmas (Inativos)
         const ghosts = users.filter(u => {
-            // Se o usuário tem logs recentes, ele NÃO é fantasma (ignora o ultimo_visto bugado)
-            if (usuariosComAtividadeRecente.has(u.username)) return false;
-
-            // Se não tem log recente, confiamos no ultimo_visto
-            if (!u.ultimo_visto) return true; // Nunca visto
-            return new Date(u.ultimo_visto) < noventaDiasAtrasData; // Visto há muito tempo
+            // Se teve log recente, não é fantasma
+            if (usuariosComAtividade.has(u.username)) return false;
+            
+            // Se não tem log, confia no 'ultimo_visto'
+            if (!u.ultimo_visto) return true; // Nunca entrou
+            return new Date(u.ultimo_visto) < noventaDiasAtrasData;
         });
+
+        // 6. Atualiza Interface
+        animateValue('kpi-users', parseInt(document.getElementById('kpi-users').innerText || 0), usuariosComAtividade.size, 1000);
+        animateValue('kpi-copies', parseInt(document.getElementById('kpi-copies').innerText || 0), totalCopias, 1000);
+        animateValue('kpi-edits', parseInt(document.getElementById('kpi-edits').innerText || 0), totalEdicoes, 1000);
 
         dashboardData = { statsF, statsU, ghosts };
 
@@ -118,6 +116,7 @@ function agendarAtualizacao() {
     dashboardDebounceTimer = setTimeout(() => {
         carregarDashboard();
         
+        // Se houver modal aberto, atualiza o conteúdo dele também
         const modal = document.getElementById('modal-dashboard-detail');
         if (modal && !modal.classList.contains('hidden')) {
             const titulo = document.getElementById('modal-dash-title').innerText;
@@ -126,7 +125,7 @@ function agendarAtualizacao() {
             else if(titulo.includes('Inativos')) abrirModalDashboard('GHOSTS');
             else if(titulo.includes('Auditoria')) abrirModalDashboard('AUDIT');
         }
-    }, 1000);
+    }, 1500); // 1.5s delay para não sobrecarregar em rajadas
 }
 
 // --- MODAIS DE DETALHES ---
@@ -138,7 +137,6 @@ function abrirModalDashboard(tipo) {
 
     if(tipo === 'RANKING') {
         title.innerHTML = '<i class="fas fa-trophy text-blue-500"></i> Ranking (90 dias)';
-        // Filtra para mostrar só quem tem cópias > 0
         const ativos = dashboardData.statsU.filter(u => u.copias > 0);
         
         c.innerHTML = ativos.length ? `
@@ -161,23 +159,24 @@ function abrirModalDashboard(tipo) {
                             </td>
                         </tr>`).join('')}
                 </tbody>
-            </table>` : '<div class="p-10 text-center text-gray-400">Nenhuma cópia registrada.</div>';
+            </table>` : '<div class="p-10 text-center text-gray-400">Nenhuma cópia registrada neste período.</div>';
     }
 
     if(tipo === 'TOP') {
         title.innerHTML = '<i class="fas fa-fire text-orange-500"></i> Top Frases (90 dias)';
-        const top20 = dashboardData.statsF.slice(0, 20).filter(f => f.usos > 0); // Só mostra o que tem uso
+        const top20 = dashboardData.statsF.slice(0, 20).filter(f => f.usos > 0);
+        
         c.innerHTML = top20.length ? `
             <ul class="divide-y divide-gray-100">
                 ${top20.map((f, i) => `
                     <li class="p-4 hover:bg-gray-50 flex justify-between items-center transition">
-                        <div>
+                        <div class="pr-4">
                             <div class="font-bold text-blue-600 mb-0.5 flex items-center gap-2">
                                 #${i+1} ${f.empresa}
                             </div>
-                            <div class="text-sm text-gray-800">${f.motivo}</div>
+                            <div class="text-sm text-gray-800 line-clamp-1">${f.motivo}</div>
                         </div>
-                        <div class="text-right shrink-0 ml-4">
+                        <div class="text-right shrink-0">
                             <span class="text-lg font-extrabold text-gray-700">${f.usos}</span>
                             <span class="block text-[10px] text-gray-400 uppercase font-bold">usos</span>
                         </div>
@@ -205,33 +204,44 @@ function abrirModalDashboard(tipo) {
                     }).join('')}
                 </div>
              </div>` : 
-            '<div class="p-10 text-center text-green-500 font-bold">Todos os usuários estão ativos!</div>';
+            `<div class="p-10 text-center text-green-500 flex flex-col items-center gap-2">
+                <i class="fas fa-check-circle text-3xl"></i>
+                <span class="font-bold">Todos os usuários estão ativos!</span>
+            </div>`;
     }
 
     if(tipo === 'AUDIT') {
         title.innerHTML = '<i class="fas fa-broom text-red-500"></i> Auditoria de Frases';
+        // Frases antigas (>90 dias) com pouco uso (<3)
         const l = dashboardData.statsF.filter(f => f.usos < 3 && (new Date() - new Date(f.created_at || 0)) / 86400000 > 90);
         c.innerHTML = l.length ? l.map(f => `
             <div class="p-4 border-b flex justify-between items-center hover:bg-red-50 transition">
                 <div>
-                    <div class="font-bold text-gray-700">${f.empresa}</div>
-                    <div class="text-xs text-red-500 mt-1">Baixo uso (${f.usos})</div>
+                    <div class="font-bold text-gray-700">${f.empresa} - ${f.motivo}</div>
+                    <div class="text-xs text-red-500 mt-1">Criada em: ${new Date(f.created_at).toLocaleDateString()} • Usos: ${f.usos}</div>
                 </div>
                 <button onclick="deletarFraseDashboard(${f.id}, '${f.empresa}', ${f.usos})" class="bg-white text-red-500 border border-red-200 px-3 py-1 rounded hover:bg-red-500 hover:text-white text-xs font-bold transition">Excluir</button>
-            </div>`).join('') : '<div class="p-10 text-center text-gray-400 font-bold">Nenhuma frase obsoleta.</div>';
+            </div>`).join('') : '<div class="p-10 text-center text-gray-400 font-bold">Nenhuma frase obsoleta encontrada.</div>';
     }
 }
 
 async function deletarFraseDashboard(id, autor, usos) { 
     if((await Swal.fire({
-        title:'Excluir?', html:`Frase com <b>${usos} usos</b>. Confirmar?`, icon: 'warning',
-        showCancelButton:true, confirmButtonColor:'#ef4444', confirmButtonText: 'Sim', cancelButtonText: 'Não'
+        title:'Excluir Frase?', 
+        html:`Esta frase tem apenas <b>${usos} usos</b> recentes. Deseja remover?`, 
+        icon: 'warning',
+        showCancelButton:true, 
+        confirmButtonColor:'#ef4444', 
+        confirmButtonText: 'Sim, excluir', 
+        cancelButtonText: 'Cancelar'
     })).isConfirmed) { 
         await _supabase.from('frases').delete().eq('id', id); 
-        await _supabase.from('logs').insert([{usuario: usuarioLogado.username, acao: 'LIMPEZA', detalhe: `Removeu frase #${id}`}]);
+        await _supabase.from('logs').insert([{usuario: usuarioLogado.username, acao: 'LIMPEZA', detalhe: `Removeu frase #${id} via Auditoria`}]);
+        
+        // Atualiza UI
         if(typeof carregarFrases === 'function') carregarFrases(); 
         agendarAtualizacao();
-        Swal.fire('Removido', '', 'success');
+        Swal.fire('Removido', 'Frase limpa do sistema.', 'success');
     } 
 }
 
