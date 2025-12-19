@@ -1,115 +1,150 @@
-let cacheLogsCompleto = [];
-let mapaUsuarios = {}; 
+// Local: js/logs.js
 
-// --- BUSCA ESPECÍFICA ---
-function filtrarLogs(termo) {
-    if (!termo) {
-        separarCategorias(cacheLogsCompleto);
-        return;
-    }
+let logsSubscription = null;
 
-    const t = termo.toLowerCase();
-    const filtrados = cacheLogsCompleto.filter(l => {
-        const nomeUsuario = mapaUsuarios[l.usuario] || '';
-        return l.usuario.toLowerCase().includes(t) ||
-               nomeUsuario.toLowerCase().includes(t) ||
-               l.acao.toLowerCase().includes(t) ||
-               (l.detalhe && l.detalhe.toLowerCase().includes(t));
-    });
-
-    separarCategorias(filtrados);
-}
-
-// --- CARREGAR LOGS ---
 async function carregarLogs() {
-    const { data: users } = await _supabase.from('usuarios').select('username, nome');
-    if(users) {
-        mapaUsuarios = {};
-        users.forEach(u => mapaUsuarios[u.username] = u.nome || u.username);
-    }
+    const containerAcessos = document.getElementById('col-acessos');
+    const containerUso = document.getElementById('col-uso');
+    const containerAuditoria = document.getElementById('col-auditoria');
 
-    const { data, error } = await _supabase
-        .from('logs')
-        .select('*')
-        .order('data_hora', { ascending: false })
-        .limit(200);
+    // Estado de "Carregando..."
+    if(containerAcessos) containerAcessos.innerHTML = '<p class="text-center text-gray-300 text-xs py-10 animate-pulse">Carregando histórico...</p>';
+    if(containerUso) containerUso.innerHTML = '<p class="text-center text-gray-300 text-xs py-10 animate-pulse">Carregando histórico...</p>';
+    if(containerAuditoria) containerAuditoria.innerHTML = '<p class="text-center text-gray-300 text-xs py-10 animate-pulse">Carregando histórico...</p>';
 
-    if (error) { console.error("Erro logs:", error); return; }
+    try {
+        // 1. Busca os últimos 50 logs para preencher a tela inicial
+        const { data, error } = await _supabase
+            .from('logs')
+            .select('*')
+            .order('data_hora', { ascending: false })
+            .limit(50);
 
-    cacheLogsCompleto = data; 
-    separarCategorias(data);
-    
-    const btn = document.getElementById('btn-refresh-logs');
-    if(btn) {
-        const original = btn.innerHTML;
-        btn.innerHTML = '<i class="fas fa-check text-green-500"></i>';
-        setTimeout(() => btn.innerHTML = original, 1000);
+        if (error) throw error;
+
+        // Limpa os containers antes de preencher
+        limparContainers();
+
+        // Distribui os logs históricos
+        data.forEach(log => adicionarLogNaTela(log, false)); // false = não animar histórico
+
+        // 2. Inicia a escuta em tempo real (se ainda não estiver ativa)
+        iniciarEscutaRealtime();
+
+    } catch (e) {
+        console.error("Erro ao carregar logs:", e);
+        Swal.fire('Erro', 'Não foi possível carregar o histórico de logs.', 'error');
     }
 }
 
-function separarCategorias(todosLogs) {
-    const logsAcesso = todosLogs.filter(l => l.acao.includes('LOGIN'));
-    const logsUso = todosLogs.filter(l => l.acao === 'COPIAR_RANK');
-    const logsAuditoria = todosLogs.filter(l => ['CRIAR', 'EDITAR', 'EXCLUIR', 'LIMPEZA', 'EDITAR_USER', 'CRIAR_USER', 'EXCLUIR_USER'].includes(l.acao));
-
-    renderizarColuna('col-acessos', logsAcesso.slice(0, 10), 'acesso');
-    renderizarColuna('col-uso', logsUso.slice(0, 10), 'uso');
-    renderizarColuna('col-auditoria', logsAuditoria.slice(0, 10), 'audit');
+function limparContainers() {
+    document.getElementById('col-acessos').innerHTML = '';
+    document.getElementById('col-uso').innerHTML = '';
+    document.getElementById('col-auditoria').innerHTML = '';
 }
 
-function renderizarColuna(elementId, lista, tipo) {
-    const container = document.getElementById(elementId);
-    
-    if (!lista.length) {
-        container.innerHTML = `
-            <div class="flex flex-col items-center justify-center h-full text-gray-300">
-                <i class="fas fa-wind text-3xl mb-2 opacity-50"></i>
-                <p class="text-xs font-bold">Sem atividade recente</p>
-            </div>`;
-        return;
+// --- FUNÇÃO MÁGICA: REALTIME ---
+function iniciarEscutaRealtime() {
+    // Se já existe uma subscrição, não cria outra para evitar duplicados
+    if (logsSubscription) return;
+
+    logsSubscription = _supabase
+        .channel('tabela-logs-realtime')
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'logs' },
+            (payload) => {
+                // Quando um novo log chega, adiciona-o à tela com animação
+                adicionarLogNaTela(payload.new, true);
+            }
+        )
+        .subscribe();
+        
+    console.log("📡 Logs em tempo real ativados.");
+}
+
+// --- RENDERIZAÇÃO INTELIGENTE ---
+function adicionarLogNaTela(log, animar = false) {
+    // 1. Determina a Categoria (Coluna)
+    let containerId = 'col-auditoria'; // Padrão
+    let icone = 'fa-info-circle';
+    let corIcone = 'text-gray-400';
+    let corBg = 'bg-gray-50';
+
+    const acao = log.acao.toUpperCase();
+
+    // Lógica de separação
+    if (acao.includes('LOGIN') || acao.includes('ACESSO')) {
+        containerId = 'col-acessos';
+        icone = 'fa-key';
+        corIcone = 'text-green-500';
+        corBg = 'bg-green-50';
+    } 
+    else if (acao.includes('COPIAR')) {
+        containerId = 'col-uso';
+        icone = 'fa-copy';
+        corIcone = 'text-blue-500';
+        corBg = 'bg-blue-50';
+    } 
+    else if (acao.includes('CRIAR') || acao.includes('EDITAR') || acao.includes('EXCLUIR') || acao.includes('IMPORTACAO') || acao.includes('LIMPEZA')) {
+        containerId = 'col-auditoria';
+        icone = 'fa-exclamation-triangle';
+        corIcone = 'text-orange-500';
+        corBg = 'bg-orange-50';
     }
 
-    container.innerHTML = lista.map(l => {
-        const estilo = getEstiloCard(tipo);
-        
-        // --- CORREÇÃO DE DATA DEFINITIVA ---
-        // Cria o objeto de data usando a string do banco
-        const dataObj = new Date(l.data_hora);
-        
-        // Converte para o horário local do navegador do usuário
-        const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-        const dataFormatada = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        
-        let detalheTexto = l.detalhe || '';
-        if(l.acao === 'COPIAR_RANK') detalheTexto = `Copiou frase ID #${l.detalhe}`;
-        if(l.acao.includes('LOGIN')) detalheTexto = 'Login realizado com sucesso';
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-        const nomeExibicao = mapaUsuarios[l.usuario] || l.usuario;
-        const idExibicao = l.usuario; 
+    // 2. Formata a Data
+    const dataObj = new Date(log.data_hora);
+    const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const dataFormatada = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+    
+    // Calcula tempo relativo simples
+    const diffMinutos = Math.floor((new Date() - dataObj) / 60000);
+    let tempoRelativo = diffMinutos < 1 ? 'Agora mesmo' : `${diffMinutos}m atrás`;
+    if (!animar && diffMinutos > 60) tempoRelativo = `${dataFormatada} às ${horaFormatada}`;
 
-        return `
-        <div class="relative pl-4 py-2 group">
-            <div class="absolute left-0 top-0 bottom-0 w-0.5 bg-gray-100 group-last:bottom-auto group-last:h-1/2"></div>
-            <div class="absolute left-[-4px] top-3 w-2.5 h-2.5 rounded-full ${estilo.dot} border-2 border-white shadow-sm"></div>
-            
-            <div class="bg-white p-3 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all duration-200">
-                <div class="flex justify-between items-start mb-1">
-                    <div class="flex flex-col">
-                        <span class="text-xs font-extrabold text-gray-800">${nomeExibicao}</span>
-                        ${nomeExibicao !== idExibicao ? `<span class="text-[9px] text-gray-400 font-mono">ID: ${idExibicao}</span>` : ''}
-                    </div>
-                    <span class="text-[9px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded ml-2 whitespace-nowrap">${dataFormatada} ${horaFormatada}</span>
-                </div>
-                <p class="text-[10px] font-bold uppercase tracking-wider ${estilo.textAcao} mb-0.5 mt-1">${l.acao.replace(/_/g, ' ')}</p>
-                <p class="text-xs text-gray-500 font-medium leading-tight">${detalheTexto}</p>
+    // 3. Monta o HTML
+    // Se for 'animar' (novo log), adicionamos classes de animação
+    const animClasses = animar ? 'animate-fade-in-down border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent';
+
+    const html = `
+        <div class="p-3 rounded-lg border border-gray-100 bg-white shadow-sm flex gap-3 items-start transition-all hover:bg-gray-50 ${animClasses}">
+            <div class="mt-1 w-8 h-8 rounded-full ${corBg} flex items-center justify-center shrink-0">
+                <i class="fas ${icone} ${corIcone} text-xs"></i>
             </div>
-        </div>`;
-    }).join('');
+            <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-start">
+                    <p class="text-xs font-bold text-gray-700 truncate">${log.usuario}</p>
+                    <span class="text-[9px] font-mono text-gray-400 whitespace-nowrap ml-2">${horaFormatada}</span>
+                </div>
+                <p class="text-[10px] font-bold uppercase text-gray-500 mt-0.5 tracking-wide">${log.acao}</p>
+                <p class="text-xs text-gray-600 leading-tight mt-1 break-words">${log.detalhe || 'Sem detalhes'}</p>
+            </div>
+        </div>
+    `;
+
+    // 4. Insere no TOPO da lista (afterbegin)
+    container.insertAdjacentHTML('afterbegin', html);
+
+    // 5. Limpeza de Excesso (Opcional: mantém apenas os últimos 50 elementos para não pesar o browser)
+    if (container.children.length > 50) {
+        container.lastElementChild.remove();
+    }
 }
 
-function getEstiloCard(tipo) {
-    if (tipo === 'acesso') return { dot: 'bg-green-500', textAcao: 'text-green-600' };
-    if (tipo === 'uso') return { dot: 'bg-blue-500', textAcao: 'text-blue-600' };
-    if (tipo === 'audit') return { dot: 'bg-orange-500', textAcao: 'text-orange-600' };
-    return { dot: 'bg-gray-400', textAcao: 'text-gray-600' };
+// Estilo extra para a animação de entrada (se não tiveres no tailwind config)
+// Adicionamos via JS para garantir que funciona
+const style = document.createElement('style');
+style.innerHTML = `
+@keyframes fadeInDown {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
 }
+.animate-fade-in-down {
+    animation: fadeInDown 0.5s ease-out forwards;
+}
+`;
+document.head.appendChild(style);
