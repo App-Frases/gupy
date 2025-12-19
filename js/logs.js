@@ -48,7 +48,7 @@ async function carregarLogs() {
         // Distribui os logs históricos
         data.forEach(log => adicionarLogNaTela(log, false)); 
 
-        // 3. Inicia a escuta em tempo real
+        // 3. Inicia a escuta em tempo real (garante que não duplique)
         iniciarEscutaRealtime();
 
     } catch (e) {
@@ -83,7 +83,10 @@ function limparContainers() {
 
 // --- REALTIME ---
 function iniciarEscutaRealtime() {
-    if (logsSubscription) return;
+    // Se já existe uma subscrição, remove antes de criar outra para evitar duplicidade
+    if (logsSubscription) {
+        _supabase.removeChannel(logsSubscription);
+    }
 
     logsSubscription = _supabase
         .channel('tabela-logs-realtime')
@@ -91,25 +94,26 @@ function iniciarEscutaRealtime() {
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'logs' },
             async (payload) => {
+                console.log("Novo log recebido em tempo real:", payload.new); // Debug
+
                 // Se chegar um log de um usuário novo que não está no cache, tenta buscar rapidinho
                 if (!cacheNomesLogs[payload.new.usuario]) {
                     await carregarNomesParaCache();
                 }
+                // Adiciona com animação (true)
                 adicionarLogNaTela(payload.new, true);
             }
         )
         .subscribe();
 }
 
-// --- RENDERIZAÇÃO (Agora com Nomes e Tradução) ---
+// --- RENDERIZAÇÃO ---
 function adicionarLogNaTela(log, animar = false) {
     // 1. Traduzir Ação
     const acaoOriginal = log.acao ? log.acao.toUpperCase() : '';
-    // Tenta pegar do dicionário, se não existir, formata o original
     const acaoLegivel = dicionarioAcoes[acaoOriginal] || acaoOriginal.replace('_', ' ');
 
     // 2. Traduzir Nome do Usuário
-    // Usa o cache. Se não achar, usa o ID original
     const nomeExibicao = cacheNomesLogs[log.usuario] || log.usuario;
 
     // 3. Definir Categoria e Ícone
@@ -140,23 +144,23 @@ function adicionarLogNaTela(log, animar = false) {
     const container = document.getElementById(containerId);
     if (!container) return;
 
-    // 4. Formatação de Data Correta (Locale do Navegador)
+    // 4. Formatação de DATA CORRETA (Sem horário, corrigindo fuso do Brasil)
     const dataObj = new Date(log.data_hora);
     
-    // Força o formato brasileiro: DD/MM às HH:mm
-    const diaMes = dataObj.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-    const horaMin = dataObj.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    // Configuração para forçar o Fuso de SP e mostrar apenas a data numérica
+    const opcoesData = { 
+        timeZone: 'America/Sao_Paulo', 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+    };
     
-    // Cálculo de tempo relativo (ex: "há 5 min")
-    const diffMinutos = Math.floor((new Date() - dataObj) / 60000);
-    let tempoDisplay;
-    
-    if (diffMinutos < 1) tempoDisplay = 'Agora mesmo';
-    else if (diffMinutos < 60) tempoDisplay = `há ${diffMinutos} min`;
-    else tempoDisplay = `${diaMes} às ${horaMin}`;
+    // Ex: "19/12/2025"
+    const dataFormatada = dataObj.toLocaleDateString('pt-BR', opcoesData);
 
     // HTML do Card
-    const animClasses = animar ? 'animate-fade-in-down border-l-4 border-l-blue-500' : 'border-l-4 border-l-transparent';
+    // Se for 'animar' (realtime), adiciona borda azul e efeito fade
+    const animClasses = animar ? 'animate-fade-in-down border-l-4 border-l-blue-500 bg-blue-50/20' : 'border-l-4 border-l-transparent';
 
     const html = `
         <div class="p-3 rounded-lg border border-gray-100 bg-white shadow-sm flex gap-3 items-start transition-all hover:bg-gray-50 ${animClasses}">
@@ -166,7 +170,9 @@ function adicionarLogNaTela(log, animar = false) {
             <div class="flex-1 min-w-0">
                 <div class="flex justify-between items-start">
                     <p class="text-xs font-bold text-gray-800 truncate" title="${log.usuario}">${nomeExibicao}</p>
-                    <span class="text-[9px] font-mono text-gray-400 whitespace-nowrap ml-2" title="${dataObj.toLocaleString()}">${tempoDisplay}</span>
+                    <span class="text-[10px] font-mono text-gray-400 whitespace-nowrap ml-2" title="${dataObj.toLocaleString()}">
+                        <i class="far fa-calendar-alt mr-1"></i>${dataFormatada}
+                    </span>
                 </div>
                 <p class="text-[10px] font-bold uppercase text-blue-600 mt-0.5 tracking-wide">${acaoLegivel}</p>
                 <p class="text-xs text-gray-500 leading-tight mt-1 break-words">${log.detalhe || ''}</p>
@@ -174,22 +180,27 @@ function adicionarLogNaTela(log, animar = false) {
         </div>
     `;
 
+    // Insere no topo da lista (afterbegin)
     container.insertAdjacentHTML('afterbegin', html);
 
+    // Mantém a lista limpa (máximo 50 itens na tela)
     if (container.children.length > 50) {
         container.lastElementChild.remove();
     }
 }
 
-// Estilo de animação
-const styleLogs = document.createElement('style');
-styleLogs.innerHTML = `
-@keyframes fadeInDown {
-    from { opacity: 0; transform: translateY(-10px); }
-    to { opacity: 1; transform: translateY(0); }
+// Estilo de animação (caso não tenha no CSS global)
+if (!document.getElementById('style-logs-anim')) {
+    const styleLogs = document.createElement('style');
+    styleLogs.id = 'style-logs-anim';
+    styleLogs.innerHTML = `
+    @keyframes fadeInDown {
+        from { opacity: 0; transform: translateY(-10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-fade-in-down {
+        animation: fadeInDown 0.5s ease-out forwards;
+    }
+    `;
+    document.head.appendChild(styleLogs);
 }
-.animate-fade-in-down {
-    animation: fadeInDown 0.5s ease-out forwards;
-}
-`;
-document.head.appendChild(styleLogs);
