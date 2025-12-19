@@ -187,20 +187,62 @@ async function buscarCEP() {
         resArea.classList.remove('hidden');
     } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na busca', 'error'); }
 }
+
+// --- FUNÇÃO CALCULAR IDADE ATUALIZADA (ANOS, MESES, SEMANAS, DIAS) ---
 function calcularIdade() {
-    const val = document.getElementById('nasc-input').value; const parts = val.split('/'); 
-    if(parts.length!==3) return Swal.fire('Erro', 'Data inválida', 'warning');
-    const diaNasc = parseInt(parts[0]); const mesNasc = parseInt(parts[1]); const anoNasc = parseInt(parts[2]);
-    if(diaNasc < 1 || diaNasc > 31 || mesNasc < 1 || mesNasc > 12 || anoNasc < 1900) return Swal.fire('Erro', 'Data inválida', 'error');
+    const val = document.getElementById('nasc-input').value; 
+    const parts = val.split('/'); 
+    
+    if(parts.length !== 3) return Swal.fire('Erro', 'Data inválida', 'warning');
+    
+    const diaNasc = parseInt(parts[0]); 
+    const mesNasc = parseInt(parts[1]); 
+    const anoNasc = parseInt(parts[2]);
+    
+    if(diaNasc < 1 || diaNasc > 31 || mesNasc < 1 || mesNasc > 12 || anoNasc < 1900) {
+        return Swal.fire('Erro', 'Data inválida', 'error');
+    }
+
+    const nascimento = new Date(anoNasc, mesNasc - 1, diaNasc);
     const hoje = new Date();
-    let idade = hoje.getFullYear() - anoNasc;
-    const mesAtual = hoje.getMonth() + 1;
-    const diaAtual = hoje.getDate();
-    if (mesAtual < mesNasc || (mesAtual === mesNasc && diaAtual < diaNasc)) { idade--; }
-    document.getElementById('idade-resultado').innerText = idade;
+    
+    if (nascimento > hoje) return Swal.fire('Erro', 'Data futura não permitida', 'warning');
+
+    // Cálculos base
+    let anos = hoje.getFullYear() - nascimento.getFullYear();
+    let meses = hoje.getMonth() - nascimento.getMonth();
+    let dias = hoje.getDate() - nascimento.getDate();
+
+    // Ajuste de dias negativos (pegando dias do mês anterior)
+    if (dias < 0) {
+        meses--;
+        // Pega o último dia do mês anterior para saber quantos dias ele tinha
+        const ultimoDiaMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
+        dias += ultimoDiaMesAnterior;
+    }
+
+    // Ajuste de meses negativos (pegando do ano anterior)
+    if (meses < 0) {
+        anos--;
+        meses += 12;
+    }
+
+    // Calcular Semanas e Dias Restantes
+    const semanas = Math.floor(dias / 7);
+    const diasFinais = dias % 7;
+
+    // Atualiza a interface
     document.getElementById('data-nasc-display').innerText = val;
+    
+    // Preenche os novos campos do grid
+    document.getElementById('res-anos').innerText = anos;
+    document.getElementById('res-meses').innerText = meses;
+    document.getElementById('res-semanas').innerText = semanas;
+    document.getElementById('res-dias').innerText = diasFinais;
+
     document.getElementById('idade-resultado-box').classList.remove('hidden');
 }
+
 function mascaraData(i) { let v = i.value.replace(/\D/g, ""); if(v.length>2) v=v.substring(0,2)+"/"+v.substring(2); if(v.length>5) v=v.substring(0,5)+"/"+v.substring(5,9); i.value = v; }
 function fecharModalCEP() { document.getElementById('modal-cep').classList.add('hidden'); }
 function fecharModalIdade() { document.getElementById('modal-idade').classList.add('hidden'); }
