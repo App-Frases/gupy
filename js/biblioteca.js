@@ -111,6 +111,21 @@ async function salvarFrase() {
     const rawConteudo = document.getElementById('inp-conteudo').value;
     let conteudoLimpo = rawConteudo.trim();
     if(conteudoLimpo) conteudoLimpo = conteudoLimpo.charAt(0).toUpperCase() + conteudoLimpo.slice(1);
+    
+    if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
+
+    // --- VALIDAÇÃO DE DUPLICIDADE ---
+    const existeDuplicada = cacheFrases.find(f => {
+        // Ignora a própria frase se for edição (id deve ser diferente)
+        if (id && f.id == id) return false;
+        // Compara conteúdo ignorando maiúsculas/minúsculas
+        return f.conteudo.trim().toLowerCase() === conteudoLimpo.toLowerCase();
+    });
+
+    if (existeDuplicada) {
+        return Swal.fire('Duplicidade', 'Esta frase já existe na biblioteca.', 'warning');
+    }
+    // --------------------------------
 
     const dados = { 
         empresa: formatarTextoBonito(document.getElementById('inp-empresa').value, 'titulo'), 
@@ -120,7 +135,6 @@ async function salvarFrase() {
         revisado_por: usuarioLogado.username 
     }; 
     
-    if(!dados.conteudo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
     try { 
         if(id) { await _supabase.from('frases').update(dados).eq('id', id); registrarLog('EDITAR', `Editou frase #${id}`); } 
         else { await _supabase.from('frases').insert([dados]); registrarLog('CRIAR', `Nova frase`); } 
