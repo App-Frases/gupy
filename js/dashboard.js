@@ -1,252 +1,281 @@
 // Local: js/dashboard.js
 
-let dashboardData = {};
+// Variáveis Globais de Gráficos (para destruir e recriar corretamente)
+let chartTimeline = null;
+let chartMotivos = null;
 let dashboardSubscription = null;
-let dashboardDebounceTimer = null;
+let debounceDashboard = null;
 
-function fecharModalDashboard() { 
-    document.getElementById('modal-dashboard-detail').classList.add('hidden'); 
-}
+// --- INICIALIZAÇÃO E CARREGAMENTO ---
 
-// --- CARREGAMENTO OTIMIZADO ---
 async function carregarDashboard() {
-    const noventaDiasAtrasData = new Date();
-    noventaDiasAtrasData.setDate(noventaDiasAtrasData.getDate() - 90);
-    const dataCorteISO = noventaDiasAtrasData.toISOString();
-
     try {
-        // 1. Busca dados do Banco
-        const { data: recentLogs, error: errLogs } = await _supabase
+        // Data de corte: 30 dias para gráficos, 90 para estatísticas gerais
+        const date30d = new Date(); date30d.setDate(date30d.getDate() - 30);
+        const date90d = new Date(); date90d.setDate(date90d.getDate() - 90);
+        
+        // 1. Buscando Dados (Filtrados por data para performance)
+        const { data: logs, error: errLogs } = await _supabase
             .from('logs')
             .select('*')
-            .gte('data_hora', dataCorteISO);
-
-        const { data: users, error: errUsers } = await _supabase.from('usuarios').select('*');
-        const { data: phrases, error: errPhrases } = await _supabase.from('frases').select('*');
-        
-        if (errLogs || errUsers || errPhrases) throw new Error("Falha ao buscar dados do Dashboard");
-
-        // 2. Processamento Inteligente com Mapas (O(N) em vez de O(N^2))
-        const usoFrasesMap = {}; // ID da frase -> Quantidade de usos
-        const copiasPorUsuarioMap = {}; // Username -> Quantidade de cópias
-        const usuariosComAtividade = new Set();
-        
-        let totalCopias = 0;
-        let totalEdicoes = 0;
-
-        recentLogs.forEach(log => {
-            const acao = log.acao ? log.acao.toUpperCase() : '';
-            const detalhe = log.detalhe ? String(log.detalhe) : '';
-            const usuario = log.usuario;
-
-            // Marca usuário como ativo
-            usuariosComAtividade.add(usuario);
-
-            // Analisa Cópias
-            if (acao.includes('COPIAR')) {
-                totalCopias++;
-                copiasPorUsuarioMap[usuario] = (copiasPorUsuarioMap[usuario] || 0) + 1;
-
-                // Extração Segura do ID:
-                // Se o detalhe for "15", "#15", "Frase 15", o replace pega só o 15.
-                const idExtraido = detalhe.replace(/\D/g, ''); 
-                
-                if (idExtraido) {
-                    usoFrasesMap[idExtraido] = (usoFrasesMap[idExtraido] || 0) + 1;
-                }
-            }
-
-            // Analisa Edições
-            if (acao.includes('CRIAR') || acao.includes('EDITAR') || acao.includes('EXCLUIR')) {
-                totalEdicoes++;
-            }
-        });
-
-        // 3. Monta Estatísticas de Usuários
-        const statsU = users.map(u => ({
-            username: u.username,
-            nome: u.nome || u.username,
-            copias: copiasPorUsuarioMap[u.username] || 0
-        })).sort((a, b) => b.copias - a.copias);
-
-        // 4. Monta Estatísticas de Frases
-        const statsF = phrases.map(f => ({
-            ...f,
-            usos: usoFrasesMap[f.id] || 0
-        })).sort((a, b) => b.usos - a.usos);
-
-        // 5. Detecta Usuários Fantasmas (Inativos)
-        const ghosts = users.filter(u => {
-            // Se teve log recente, não é fantasma
-            if (usuariosComAtividade.has(u.username)) return false;
+            .gte('data_hora', date90d.toISOString())
+            .order('data_hora', { ascending: true }); // Importante para timeline
             
-            // Se não tem log, confia no 'ultimo_visto'
-            if (!u.ultimo_visto) return true; // Nunca entrou
-            return new Date(u.ultimo_visto) < noventaDiasAtrasData;
-        });
+        const { data: users, error: errUsers } = await _supabase.from('usuarios').select('username, nome, ultimo_visto');
+        const { data: phrases, error: errPhrases } = await _supabase.from('frases').select('id, empresa, motivo');
+        
+        if (errLogs || errUsers || errPhrases) throw new Error("Erro ao buscar dados");
 
-        // 6. Atualiza Interface
-        animateValue('kpi-users', parseInt(document.getElementById('kpi-users').innerText || 0), usuariosComAtividade.size, 1000);
-        animateValue('kpi-copies', parseInt(document.getElementById('kpi-copies').innerText || 0), totalCopias, 1000);
-        animateValue('kpi-edits', parseInt(document.getElementById('kpi-edits').innerText || 0), totalEdicoes, 1000);
-
-        dashboardData = { statsF, statsU, ghosts };
-
+        // 2. Processamento dos Dados
+        const processado = processarDadosDashboard(logs, users, phrases, date30d);
+        
+        // 3. Atualização da Interface
+        atualizarKPIs(processado);
+        renderizarGraficos(processado);
+        renderizarTabelas(processado);
+        
+        // 4. Iniciar Realtime (se ainda não iniciado)
         iniciarDashboardRealtime();
 
     } catch (e) {
-        console.error("Erro no Dashboard:", e);
+        console.error("Dashboard Error:", e);
     }
 }
 
-// --- REALTIME ---
-function iniciarDashboardRealtime() {
-    if (dashboardSubscription) return; 
+// --- LÓGICA DE PROCESSAMENTO DE DADOS ---
 
-    dashboardSubscription = _supabase
-        .channel('dashboard-updates')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, () => agendarAtualizacao())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'frases' }, () => agendarAtualizacao())
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => agendarAtualizacao())
-        .subscribe();
-}
+function processarDadosDashboard(logs, users, phrases, date30d) {
+    // Mapas auxiliares
+    const phraseMap = {}; 
+    phrases.forEach(p => phraseMap[p.id] = p);
+    
+    const userMap = {};
+    users.forEach(u => userMap[u.username] = u.nome || u.username);
 
-function agendarAtualizacao() {
-    clearTimeout(dashboardDebounceTimer);
-    dashboardDebounceTimer = setTimeout(() => {
-        carregarDashboard();
-        
-        // Se houver modal aberto, atualiza o conteúdo dele também
-        const modal = document.getElementById('modal-dashboard-detail');
-        if (modal && !modal.classList.contains('hidden')) {
-            const titulo = document.getElementById('modal-dash-title').innerText;
-            if(titulo.includes('Ranking')) abrirModalDashboard('RANKING');
-            else if(titulo.includes('Top')) abrirModalDashboard('TOP');
-            else if(titulo.includes('Inativos')) abrirModalDashboard('GHOSTS');
-            else if(titulo.includes('Auditoria')) abrirModalDashboard('AUDIT');
+    // Estruturas de resultado
+    let totalUsos30d = 0;
+    let usersAtivosSet = new Set();
+    const timelineData = {}; // "YYYY-MM-DD" -> count
+    const motivosCount = {}; // "Feedback" -> count
+    const userRanking = {}; // "username" -> count
+    const phraseRanking = {}; // "id" -> count
+
+    // Inicializa timeline com 0 para os últimos 30 dias (para o gráfico não ficar buraco)
+    for (let i = 0; i < 30; i++) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        timelineData[d.toISOString().split('T')[0]] = 0;
+    }
+
+    logs.forEach(log => {
+        const logDate = new Date(log.data_hora);
+        const dateStr = log.data_hora.split('T')[0];
+        const isRecent30 = logDate >= date30d;
+
+        // Só considera logs de cópia para estatísticas de USO
+        if (log.acao === 'COPIAR') {
+            const phraseId = String(log.detalhe).replace(/\D/g, ''); // Garante ID limpo
+            
+            // --- Estatísticas de 30 Dias ---
+            if (isRecent30) {
+                totalUsos30d++;
+                usersAtivosSet.add(log.usuario);
+                
+                // Timeline
+                if (timelineData[dateStr] !== undefined) timelineData[dateStr]++;
+
+                // Motivos (Gráfico Rosca)
+                if (phraseId && phraseMap[phraseId]) {
+                    const motivo = phraseMap[phraseId].motivo || 'Outros';
+                    motivosCount[motivo] = (motivosCount[motivo] || 0) + 1;
+                }
+            }
+
+            // --- Rankings (Base 90 dias - logs totais trazidos) ---
+            // Ranking Usuários
+            userRanking[log.usuario] = (userRanking[log.usuario] || 0) + 1;
+            
+            // Ranking Frases
+            if (phraseId) {
+                phraseRanking[phraseId] = (phraseRanking[phraseId] || 0) + 1;
+            }
         }
-    }, 1500); // 1.5s delay para não sobrecarregar em rajadas
+    });
+
+    return {
+        kpis: {
+            totalUsos: totalUsos30d,
+            activeUsers: usersAtivosSet.size,
+            dailyAvg: (totalUsos30d / 30).toFixed(1)
+        },
+        charts: {
+            timeline: timelineData,
+            motivos: motivosCount
+        },
+        rankings: {
+            users: userRanking,
+            phrases: phraseRanking
+        },
+        meta: {
+            userMap,
+            phraseMap
+        }
+    };
 }
 
-// --- MODAIS DE DETALHES ---
-function abrirModalDashboard(tipo) {
-    const modal = document.getElementById('modal-dashboard-detail'); 
-    modal.classList.remove('hidden'); 
-    const c = document.getElementById('modal-dash-content');
-    const title = document.getElementById('modal-dash-title');
+// --- RENDERIZAÇÃO VISUAL ---
 
-    if(tipo === 'RANKING') {
-        title.innerHTML = '<i class="fas fa-trophy text-blue-500"></i> Ranking (90 dias)';
-        const ativos = dashboardData.statsU.filter(u => u.copias > 0);
-        
-        c.innerHTML = ativos.length ? `
-            <table class="w-full text-sm text-left">
-                <thead class="bg-gray-50 font-bold text-gray-500 border-b">
-                    <tr><th class="p-4">Colaborador</th><th class="p-4 text-right">Cópias</th></tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    ${ativos.map((u, i) => `
-                        <tr class="hover:bg-gray-50 transition">
-                            <td class="p-4">
-                                <div class="font-bold text-gray-700 flex items-center gap-2">
-                                    <span class="w-6 text-gray-400 font-normal text-xs">#${i+1}</span> 
-                                    ${u.nome}
-                                    ${i === 0 ? '<i class="fas fa-crown text-yellow-400 ml-1"></i>' : ''}
-                                </div>
-                            </td>
-                            <td class="p-4 text-right">
-                                <span class="bg-blue-100 text-blue-700 py-1 px-3 rounded-full font-bold text-xs">${u.copias}</span>
-                            </td>
-                        </tr>`).join('')}
-                </tbody>
-            </table>` : '<div class="p-10 text-center text-gray-400">Nenhuma cópia registrada neste período.</div>';
+function atualizarKPIs(data) {
+    // Efeito de contagem
+    animateValue('dash-total-usos', 0, data.kpis.totalUsos, 800);
+    animateValue('dash-active-users', 0, data.kpis.activeUsers, 800);
+    animateValue('dash-daily-avg', 0, parseFloat(data.kpis.dailyAvg), 800);
+
+    // Top Frase ID
+    const topPhraseId = Object.entries(data.rankings.phrases).sort((a,b) => b[1] - a[1])[0];
+    const elTop = document.getElementById('dash-top-phrase-id');
+    if (topPhraseId && data.meta.phraseMap[topPhraseId[0]]) {
+        elTop.innerText = data.meta.phraseMap[topPhraseId[0]].empresa;
+    } else {
+        elTop.innerText = "-";
+    }
+}
+
+function renderizarGraficos(data) {
+    // 1. Gráfico de Linha (Timeline)
+    const ctxTimeline = document.getElementById('chart-timeline');
+    if (ctxTimeline) {
+        // Ordena datas
+        const sortedDates = Object.keys(data.charts.timeline).sort();
+        const values = sortedDates.map(d => data.charts.timeline[d]);
+        // Formata datas para ficar bonito (ex: 15/12)
+        const labels = sortedDates.map(d => d.split('-').slice(1).reverse().join('/'));
+
+        if (chartTimeline) chartTimeline.destroy();
+
+        chartTimeline = new Chart(ctxTimeline, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Frases Copiadas',
+                    data: values,
+                    borderColor: '#3b82f6', // blue-500
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    borderWidth: 2,
+                    tension: 0.3, // Curva suave
+                    fill: true,
+                    pointRadius: 2,
+                    pointHoverRadius: 5
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
+                scales: { 
+                    y: { beginAtZero: true, grid: { borderDash: [2, 4] } },
+                    x: { grid: { display: false } }
+                }
+            }
+        });
     }
 
-    if(tipo === 'TOP') {
-        title.innerHTML = '<i class="fas fa-fire text-orange-500"></i> Top Frases (90 dias)';
-        const top20 = dashboardData.statsF.slice(0, 20).filter(f => f.usos > 0);
+    // 2. Gráfico de Rosca (Motivos)
+    const ctxMotivos = document.getElementById('chart-motivos');
+    if (ctxMotivos) {
+        // Pega Top 5 motivos e agrupa o resto em "Outros"
+        const entries = Object.entries(data.charts.motivos).sort((a,b) => b[1] - a[1]);
+        const top5 = entries.slice(0, 5);
+        const others = entries.slice(5).reduce((acc, curr) => acc + curr[1], 0);
         
-        c.innerHTML = top20.length ? `
-            <ul class="divide-y divide-gray-100">
-                ${top20.map((f, i) => `
-                    <li class="p-4 hover:bg-gray-50 flex justify-between items-center transition">
-                        <div class="pr-4">
-                            <div class="font-bold text-blue-600 mb-0.5 flex items-center gap-2">
-                                #${i+1} ${f.empresa}
-                            </div>
-                            <div class="text-sm text-gray-800 line-clamp-1">${f.motivo}</div>
+        if (others > 0) top5.push(['Outros', others]);
+
+        const labels = top5.map(x => x[0]);
+        const values = top5.map(x => x[1]);
+        const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#94a3b8'];
+
+        if (chartMotivos) chartMotivos.destroy();
+
+        chartMotivos = new Chart(ctxMotivos, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: values,
+                    backgroundColor: colors,
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { 
+                    legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } 
+                },
+                cutout: '65%'
+            }
+        });
+    }
+}
+
+function renderizarTabelas(data) {
+    // 1. Top Colaboradores
+    const elUsers = document.getElementById('table-top-users');
+    const sortedUsers = Object.entries(data.rankings.users).sort((a,b) => b[1] - a[1]).slice(0, 10);
+    
+    elUsers.innerHTML = sortedUsers.map(([user, count], idx) => {
+        const name = data.meta.userMap[user] || user;
+        const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `<span class="text-slate-400 font-bold text-xs">#${idx+1}</span>`));
+        return `
+            <tr class="hover:bg-slate-50 transition border-b border-slate-50 last:border-0">
+                <td class="px-6 py-3 whitespace-nowrap">
+                    <div class="flex items-center gap-3">
+                        <div class="w-6 text-center">${medal}</div>
+                        <div class="font-bold text-slate-700 text-xs">${name}</div>
+                    </div>
+                </td>
+                <td class="px-6 py-3 text-right">
+                    <span class="bg-blue-100 text-blue-700 py-1 px-2 rounded text-xs font-bold">${count}</span>
+                </td>
+            </tr>
+        `;
+    }).join('') || '<tr><td colspan="2" class="p-4 text-center text-xs text-slate-400">Sem dados.</td></tr>';
+
+    // 2. Top Frases
+    const elPhrases = document.getElementById('table-top-phrases');
+    const sortedPhrases = Object.entries(data.rankings.phrases).sort((a,b) => b[1] - a[1]).slice(0, 10);
+
+    elPhrases.innerHTML = sortedPhrases.map(([id, count], idx) => {
+        const phrase = data.meta.phraseMap[id];
+        if (!phrase) return '';
+        // Calcula % para barra de progresso (baseado no maior valor)
+        const maxVal = sortedPhrases[0][1];
+        const pct = (count / maxVal) * 100;
+        
+        return `
+            <tr class="hover:bg-slate-50 transition border-b border-slate-50 last:border-0">
+                <td class="px-6 py-3">
+                    <div class="flex flex-col">
+                        <div class="flex justify-between items-end mb-1">
+                            <span class="font-bold text-slate-700 text-xs truncate max-w-[150px]">${phrase.empresa}</span>
+                            <span class="text-[10px] text-slate-400 font-bold">${count} usos</span>
                         </div>
-                        <div class="text-right shrink-0">
-                            <span class="text-lg font-extrabold text-gray-700">${f.usos}</span>
-                            <span class="block text-[10px] text-gray-400 uppercase font-bold">usos</span>
+                        <div class="w-full bg-slate-100 rounded-full h-1.5">
+                            <div class="bg-orange-400 h-1.5 rounded-full" style="width: ${pct}%"></div>
                         </div>
-                    </li>`).join('')}
-            </ul>` : '<div class="p-10 text-center text-gray-400">Nenhum uso recente detectado.</div>';
-    }
-
-    if(tipo === 'GHOSTS') {
-        title.innerHTML = '<i class="fas fa-ghost text-gray-400"></i> Inativos (>90 dias)';
-        const listaInativos = dashboardData.ghosts;
-        
-        c.innerHTML = listaInativos.length ? 
-            `<div class="p-4">
-                <p class="text-xs text-gray-500 mb-4 bg-yellow-50 p-3 rounded border border-yellow-100">
-                    <i class="fas fa-info-circle mr-1"></i> Usuários sem login e sem atividade recente.
-                </p>
-                <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    ${listaInativos.map(u => {
-                        const lastSeen = u.ultimo_visto ? new Date(u.ultimo_visto).toLocaleDateString('pt-BR') : 'Nunca';
-                        return `
-                        <div class="p-3 bg-gray-50 rounded-lg border border-gray-100 text-center hover:bg-gray-100 transition">
-                            <span class="font-bold text-gray-600 text-sm block">${u.nome || u.username}</span>
-                            <span class="text-[10px] text-red-400 font-bold">Visto: ${lastSeen}</span>
-                        </div>`;
-                    }).join('')}
-                </div>
-             </div>` : 
-            `<div class="p-10 text-center text-green-500 flex flex-col items-center gap-2">
-                <i class="fas fa-check-circle text-3xl"></i>
-                <span class="font-bold">Todos os usuários estão ativos!</span>
-            </div>`;
-    }
-
-    if(tipo === 'AUDIT') {
-        title.innerHTML = '<i class="fas fa-broom text-red-500"></i> Auditoria de Frases';
-        // Frases antigas (>90 dias) com pouco uso (<3)
-        const l = dashboardData.statsF.filter(f => f.usos < 3 && (new Date() - new Date(f.created_at || 0)) / 86400000 > 90);
-        c.innerHTML = l.length ? l.map(f => `
-            <div class="p-4 border-b flex justify-between items-center hover:bg-red-50 transition">
-                <div>
-                    <div class="font-bold text-gray-700">${f.empresa} - ${f.motivo}</div>
-                    <div class="text-xs text-red-500 mt-1">Criada em: ${new Date(f.created_at).toLocaleDateString()} • Usos: ${f.usos}</div>
-                </div>
-                <button onclick="deletarFraseDashboard(${f.id}, '${f.empresa}', ${f.usos})" class="bg-white text-red-500 border border-red-200 px-3 py-1 rounded hover:bg-red-500 hover:text-white text-xs font-bold transition">Excluir</button>
-            </div>`).join('') : '<div class="p-10 text-center text-gray-400 font-bold">Nenhuma frase obsoleta encontrada.</div>';
-    }
+                        <div class="text-[9px] text-slate-400 mt-0.5 truncate">${phrase.motivo}</div>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('') || '<tr><td class="p-4 text-center text-xs text-slate-400">Sem dados.</td></tr>';
 }
 
-async function deletarFraseDashboard(id, autor, usos) { 
-    if((await Swal.fire({
-        title:'Excluir Frase?', 
-        html:`Esta frase tem apenas <b>${usos} usos</b> recentes. Deseja remover?`, 
-        icon: 'warning',
-        showCancelButton:true, 
-        confirmButtonColor:'#ef4444', 
-        confirmButtonText: 'Sim, excluir', 
-        cancelButtonText: 'Cancelar'
-    })).isConfirmed) { 
-        await _supabase.from('frases').delete().eq('id', id); 
-        await _supabase.from('logs').insert([{usuario: usuarioLogado.username, acao: 'LIMPEZA', detalhe: `Removeu frase #${id} via Auditoria`}]);
-        
-        // Atualiza UI
-        if(typeof carregarFrases === 'function') carregarFrases(); 
-        agendarAtualizacao();
-        Swal.fire('Removido', 'Frase limpa do sistema.', 'success');
-    } 
-}
+// --- UTILS ---
 
 function animateValue(id, start, end, duration) {
-    if (start === end) return;
     const obj = document.getElementById(id);
     if (!obj) return;
     let startTimestamp = null;
@@ -257,4 +286,15 @@ function animateValue(id, start, end, duration) {
         if (progress < 1) window.requestAnimationFrame(step); else obj.innerHTML = end;
     };
     window.requestAnimationFrame(step);
+}
+
+function iniciarDashboardRealtime() {
+    if (dashboardSubscription) return; 
+    dashboardSubscription = _supabase
+        .channel('dashboard-feed')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, () => {
+            clearTimeout(debounceDashboard);
+            debounceDashboard = setTimeout(carregarDashboard, 2000); // Debounce para não atualizar freneticamente
+        })
+        .subscribe();
 }
