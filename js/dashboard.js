@@ -10,97 +10,88 @@ function fecharModalDashboard() {
 
 // --- CARREGAMENTO OTIMIZADO ---
 async function carregarDashboard() {
-    // Calcula data de corte (90 dias atrás) em formato ISO para o Banco
+    // Define data de corte (90 dias atrás)
     const noventaDiasAtrasData = new Date();
     noventaDiasAtrasData.setDate(noventaDiasAtrasData.getDate() - 90);
     const dataCorteISO = noventaDiasAtrasData.toISOString();
 
     try {
-        // 1. Busca Logs filtrados (Apenas últimos 90 dias) - Muito mais rápido
+        // 1. Busca Logs filtrados (Apenas últimos 90 dias)
         const { data: recentLogs, error: errLogs } = await _supabase
             .from('logs')
             .select('*')
-            .gte('data_hora', dataCorteISO); // .gte = Greater Than or Equal (Maior ou igual)
+            .gte('data_hora', dataCorteISO); // Traz apenas logs recentes
 
-        // 2. Busca Usuários e Frases
+        // 2. Busca Usuários e Frases para cruzar dados
         const { data: users, error: errUsers } = await _supabase.from('usuarios').select('*');
         const { data: phrases, error: errPhrases } = await _supabase.from('frases').select('*');
         
-        if (errLogs || errUsers || errPhrases) throw new Error("Falha ao buscar dados");
+        if (errLogs || errUsers || errPhrases) throw new Error("Falha ao buscar dados do dashboard");
 
-        // --- PROCESSAMENTO DOS DADOS (MEMÓRIA) ---
+        // --- PROCESSAMENTO (MEMÓRIA) ---
         
         // Mapeamento de usuários (ID -> Nome)
         const userMap = {};
         users.forEach(u => userMap[u.username] = u.nome || u.username);
 
-        // KPI 1: Usuários Ativos (Quem gerou log nos últimos 90d)
+        // KPI 1: Usuários Ativos (Quem gerou QUALQUER log nos últimos 90d)
         const usuariosAtivosSet = new Set(recentLogs.map(l => l.usuario));
         const qtdUsuariosAtivos = usuariosAtivosSet.size;
 
-        // KPI 2: Cópias Realizadas
-        const logsCopias = recentLogs.filter(l => l.acao && l.acao.includes('COPIAR'));
+        // KPI 2: Cópias Realizadas (CORREÇÃO: Busca qualquer ação que contenha "COPIAR")
+        // Isso resolve o problema de logs salvos como "COPIAR" não contarem
+        const logsCopias = recentLogs.filter(l => l.acao && l.acao.toUpperCase().includes('COPIAR'));
         const qtdCopias = logsCopias.length;
 
         // KPI 3: Edições/Criações
-        const qtdEdicoes = recentLogs.filter(l => ['CRIAR', 'EDITAR', 'CRIAR_USER'].includes(l.acao)).length;
+        const qtdEdicoes = recentLogs.filter(l => 
+            l.acao && (l.acao.includes('CRIAR') || l.acao.includes('EDITAR'))
+        ).length;
 
-        // Atualiza Cards Superiores
-        animateValue('kpi-users', parseInt(document.getElementById('kpi-users').innerText), qtdUsuariosAtivos, 1000);
-        animateValue('kpi-copies', parseInt(document.getElementById('kpi-copies').innerText), qtdCopias, 1000);
-        animateValue('kpi-edits', parseInt(document.getElementById('kpi-edits').innerText), qtdEdicoes, 1000);
+        // Atualiza Cards Superiores com Animação
+        animateValue('kpi-users', parseInt(document.getElementById('kpi-users').innerText || 0), qtdUsuariosAtivos, 1000);
+        animateValue('kpi-copies', parseInt(document.getElementById('kpi-copies').innerText || 0), qtdCopias, 1000);
+        animateValue('kpi-edits', parseInt(document.getElementById('kpi-edits').innerText || 0), qtdEdicoes, 1000);
 
-        // --- CÁLCULO DE ESTATÍSTICAS ---
+        // --- ESTATÍSTICAS DETALHADAS ---
 
-        // 1. Ranking de Frases (Top Phrases)
-        // Conta quantas vezes cada ID de frase aparece nos detalhes dos logs de cópia
-        // Obs: O log "COPIAR_RANK" costuma salvar o ID ou Texto no detalhe. 
-        // Vamos assumir que salva algo identificável. Se salvar texto, agrupa por texto.
-        const usoFrasesMap = {};
-        logsCopias.forEach(l => {
-            // Tenta extrair ID ou usa o texto inteiro se não for ID
-            // Se o seu log salva "Copiou frase #15", extraímos o 15. Se salva o texto, usamos o texto.
-            // Pelo seu código anterior, parecia usar o próprio texto/ID no detalhe.
-            const chave = l.detalhe; 
-            usoFrasesMap[chave] = (usoFrasesMap[chave] || 0) + 1;
-        });
+        // 1. Ranking de Usuários (Quem mais copiou)
+        const statsU = users.map(u => {
+            // Conta quantos logs de cópia pertencem a este usuário
+            const totalDoUser = logsCopias.filter(l => l.usuario === u.username).length;
+            return {
+                username: u.username,
+                nome: u.nome || u.username,
+                copias: totalDoUser
+            };
+        }).sort((a, b) => b.copias - a.copias); // Ordena do maior para o menor
 
-        // Cruza com a tabela de frases reais para pegar Empresa/Motivo
-        // Nota: Se o log salva apenas o ID, precisamos converter. Se salva texto, fazemos match.
-        // Assumindo match direto ou ID contido na frase.
+        // 2. Ranking de Frases (Top Phrases)
+        // Tenta identificar qual frase foi usada baseada no detalhe do log
         const statsF = phrases.map(f => {
-            // Tenta achar pelo ID ou pelo Conteúdo exato
-            // Verifica se existe log com o ID da frase ou com o texto dela
-            let usos = 0;
-            
-            // Verifica ocorrências exatas ou parciais (ajuste conforme como você grava o log)
-            // Exemplo simplificado: contagem baseada no ID mapeado no log
-            // Se você grava "Copiou: Texto da Frase", a chave é o texto.
-            
-            // Lógica genérica: Procura nos logs de cópia quantos batem com esta frase
-            // (Isso pode ser pesado, mas para <1000 logs é ok)
-            usos = logsCopias.filter(l => l.detalhe && (l.detalhe.includes(f.conteudo) || l.detalhe.includes(`#${f.id}`))).length;
+            // Verifica quantos logs mencionam esta frase (pelo Conteúdo ou pelo ID)
+            const usos = logsCopias.filter(l => {
+                const detalhe = (l.detalhe || '').toLowerCase();
+                const conteudoFrase = (f.conteudo || '').toLowerCase().substring(0, 20); // Pega o começo da frase
+                const idFrase = `#${f.id}`;
+                
+                // Considera match se o log tiver o ID (#15) ou um trecho do texto
+                return detalhe.includes(conteudoFrase) || detalhe.includes(idFrase);
+            }).length;
             
             return { ...f, usos };
         }).sort((a, b) => b.usos - a.usos);
 
-        // 2. Ranking de Usuários (Quem mais copiou)
-        const statsU = users.map(u => ({
-            username: u.username,
-            nome: u.nome || u.username,
-            copias: logsCopias.filter(l => l.usuario === u.username).length
-        })).sort((a, b) => b.copias - a.copias);
-
-        // 3. Ghosts (Inativos) - Baseado no 'ultimo_visto' do banco de usuários
+        // 3. Ghosts (Inativos) - Baseado no campo 'ultimo_visto' do banco
         const ghosts = users.filter(u => {
-            if (!u.ultimo_visto) return true; // Nunca viu
-            return new Date(u.ultimo_visto) < noventaDiasAtrasData;
+            if (!u.ultimo_visto) return true; // Nunca entrou
+            return new Date(u.ultimo_visto) < noventaDiasAtrasData; // Entrou há mais de 90 dias
         });
 
-        // Salva globalmente para usar nos Modais
+        // Salva dados globais para uso nos Modais
         dashboardData = { statsF, statsU, ghosts };
 
-        // Inicia Realtime se ainda não iniciou
+        // Inicia Realtime (se ainda não estiver rodando)
         iniciarDashboardRealtime();
 
     } catch (e) {
@@ -108,39 +99,36 @@ async function carregarDashboard() {
     }
 }
 
-// --- REALTIME ---
+// --- REALTIME (ATUALIZAÇÃO AUTOMÁTICA) ---
 function iniciarDashboardRealtime() {
-    if (dashboardSubscription) return; // Já está rodando
+    if (dashboardSubscription) return; // Evita duplicar a conexão
 
-    // Escuta mudanças nas tabelas para atualizar os gráficos
+    // Escuta qualquer mudança importante e manda recarregar o dashboard
     dashboardSubscription = _supabase
         .channel('dashboard-updates')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, () => agendarAtualizacao())
         .on('postgres_changes', { event: '*', schema: 'public', table: 'frases' }, () => agendarAtualizacao())
-        // Usuários: Escuta INSERT/DELETE. Ignora UPDATE para não atualizar a cada "heartbeat" (10s)
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'usuarios' }, () => agendarAtualizacao())
         .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'usuarios' }, () => agendarAtualizacao())
         .subscribe();
 }
 
-// Evita recarregamentos excessivos (Debounce)
+// Debounce: Evita recarregar 10 vezes se chegarem 10 logs ao mesmo tempo
 function agendarAtualizacao() {
     clearTimeout(dashboardDebounceTimer);
     dashboardDebounceTimer = setTimeout(() => {
-        // console.log("Atualizando Dashboard em Tempo Real...");
         carregarDashboard();
         
-        // Se houver algum modal aberto, atualiza o conteúdo dele também
+        // Se houver algum modal aberto, atualiza o conteúdo dele em tempo real também
         const modal = document.getElementById('modal-dashboard-detail');
         if (modal && !modal.classList.contains('hidden')) {
-            // Descobre qual tipo estava aberto pelo título
             const titulo = document.getElementById('modal-dash-title').innerText;
             if(titulo.includes('Ranking')) abrirModalDashboard('RANKING');
             else if(titulo.includes('Top')) abrirModalDashboard('TOP');
             else if(titulo.includes('Inativos')) abrirModalDashboard('GHOSTS');
             else if(titulo.includes('Auditoria')) abrirModalDashboard('AUDIT');
         }
-    }, 1000); // Aguarda 1 segundo de silêncio antes de atualizar
+    }, 1000); // Espera 1 segundo de "silêncio" antes de atualizar
 }
 
 // --- VISUALIZAÇÃO (MODAIS) ---
@@ -164,7 +152,7 @@ function abrirModalDashboard(tipo) {
                                 <div class="font-bold text-gray-700 flex items-center gap-2">
                                     <span class="w-6 text-gray-400 font-normal text-xs">#${i+1}</span> 
                                     ${u.nome}
-                                    ${i === 0 ? '<i class="fas fa-crown text-yellow-400"></i>' : ''}
+                                    ${i === 0 ? '<i class="fas fa-crown text-yellow-400 ml-2"></i>' : ''}
                                 </div>
                                 ${u.nome !== u.username ? `<div class="text-[10px] text-gray-400 pl-8">ID: ${u.username}</div>` : ''}
                             </td>
@@ -178,10 +166,10 @@ function abrirModalDashboard(tipo) {
 
     if(tipo === 'TOP') {
         title.innerHTML = '<i class="fas fa-fire text-orange-500"></i> Top Frases (90 dias)';
-        const top10 = dashboardData.statsF.slice(0, 20); // Mostra Top 20 no modal
+        const top20 = dashboardData.statsF.slice(0, 20); 
         c.innerHTML = `
             <ul class="divide-y divide-gray-100">
-                ${top10.length ? top10.map((f, i) => `
+                ${top20.length ? top20.map((f, i) => `
                     <li class="p-4 hover:bg-gray-50 flex justify-between items-center transition">
                         <div>
                             <div class="font-bold text-blue-600 mb-0.5 flex items-center gap-2">
@@ -224,7 +212,7 @@ function abrirModalDashboard(tipo) {
 
     if(tipo === 'AUDIT') {
         title.innerHTML = '<i class="fas fa-broom text-red-500"></i> Auditoria de Frases';
-        // Regra de Auditoria: Menos de 5 usos E criada há mais de 90 dias
+        // Regra: Menos de 5 usos E criada há mais de 90 dias
         const l = dashboardData.statsF.filter(f => f.usos < 5 && (new Date() - new Date(f.created_at || 0)) / 86400000 > 90);
         c.innerHTML = l.length ? l.map(f => `
             <div class="p-4 border-b flex justify-between items-center hover:bg-red-50 transition">
@@ -249,14 +237,18 @@ async function deletarFraseDashboard(id, autor, usos) {
     })).isConfirmed) { 
         await _supabase.from('frases').delete().eq('id', id); 
         await _supabase.from('logs').insert([{usuario: usuarioLogado.username, acao: 'LIMPEZA', detalhe: `Removeu frase #${id}`}]);
-        // Atualiza tudo
+        
+        // Atualiza a tela de biblioteca se ela estiver aberta
         if(typeof carregarFrases === 'function') carregarFrases(); 
-        agendarAtualizacao();
+        
+        // Força atualização imediata do dashboard
+        carregarDashboard();
+        
         Swal.fire('Removido', 'A frase foi excluída com sucesso.', 'success');
     } 
 }
 
-// Função auxiliar para animar números (Efeito visual legal)
+// Função auxiliar para animar números (Efeito visual)
 function animateValue(id, start, end, duration) {
     if (start === end) return;
     const obj = document.getElementById(id);
