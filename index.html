@@ -98,55 +98,56 @@
     </div>
 
     <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden modal-content relative">
-            <div class="bg-purple-600 px-8 py-5 border-b border-purple-500 flex justify-between items-center text-white">
-                <h3 class="text-xl font-extrabold flex items-center gap-2">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden modal-content relative">
+            
+            <div class="bg-blue-600 px-6 py-4 border-b border-blue-500 flex justify-between items-center text-white">
+                <h3 class="text-lg font-extrabold flex items-center gap-2">
                     <i class="fas fa-calculator"></i> Calculadora de Datas
                 </h3>
-                <button onclick="fecharModalIdade()" class="text-purple-200 hover:text-white transition text-xl">
+                <button onclick="fecharModalIdade()" class="text-blue-200 hover:text-white transition text-lg">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
             
-            <div class="p-8">
+            <div class="p-6">
                 <div class="hidden"><input id="nasc-input"></div>
                 
-                <div class="text-center mb-6 bg-purple-50 p-3 rounded-xl border border-purple-100">
-                    <p class="text-xs font-bold text-purple-400 uppercase tracking-widest">Data Informada</p>
-                    <p id="data-nasc-display" class="text-lg font-extrabold text-purple-700 mt-1">--/--/----</p>
-                </div>
-                
-                <div id="idade-resultado-box" class="hidden text-center bg-white p-6 rounded-2xl border-2 border-purple-100 shadow-sm mt-4">
+                <div id="idade-resultado-box" class="hidden">
                     
-                    <div class="mb-6 bg-purple-600 text-white p-4 rounded-xl shadow-lg shadow-purple-200 transform transition hover:scale-105">
-                         <span id="res-total-dias" class="block text-4xl font-extrabold">0</span>
-                         <span class="text-[10px] font-bold uppercase tracking-widest opacity-90">Dias Totais Corridos</span>
+                    <div class="flex flex-col sm:flex-row gap-4 mb-5">
+                        <div class="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col justify-center items-center w-full sm:w-1/3">
+                            <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Data</span>
+                            <p id="data-nasc-display" class="text-base font-extrabold text-blue-700 mt-0.5">--/--/----</p>
+                        </div>
+
+                        <div class="bg-blue-600 text-white p-3 rounded-xl shadow-md shadow-blue-200 flex flex-col justify-center items-center w-full sm:w-2/3 transform transition hover:scale-[1.02]">
+                             <span id="res-total-dias" class="text-3xl font-extrabold leading-none">0</span>
+                             <span class="text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">Dias Totais Corridos</span>
+                        </div>
                     </div>
 
-                    <p class="text-xs text-gray-400 font-bold uppercase mb-4 tracking-widest">Detalhamento Temporal</p>
-                    
-                    <div class="grid grid-cols-2 gap-4">
-                        <div class="bg-purple-50 p-3 rounded-xl">
-                            <span id="res-anos" class="block text-3xl font-extrabold text-purple-600">--</span>
-                            <span class="text-[10px] text-purple-400 font-bold uppercase">Anos</span>
+                    <div class="grid grid-cols-4 gap-2">
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
+                            <span id="res-anos" class="block text-xl font-extrabold text-gray-700">--</span>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase">Anos</span>
                         </div>
-                        <div class="bg-purple-50 p-3 rounded-xl">
-                            <span id="res-meses" class="block text-3xl font-extrabold text-purple-600">--</span>
-                            <span class="text-[10px] text-purple-400 font-bold uppercase">Meses</span>
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
+                            <span id="res-meses" class="block text-xl font-extrabold text-gray-700">--</span>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase">Meses</span>
                         </div>
-                        <div class="bg-purple-50 p-3 rounded-xl">
-                            <span id="res-semanas" class="block text-3xl font-extrabold text-purple-600">--</span>
-                            <span class="text-[10px] text-purple-400 font-bold uppercase">Semanas</span>
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
+                            <span id="res-semanas" class="block text-xl font-extrabold text-gray-700">--</span>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase">Sem.</span>
                         </div>
-                        <div class="bg-purple-50 p-3 rounded-xl">
-                            <span id="res-dias" class="block text-3xl font-extrabold text-purple-600">--</span>
-                            <span class="text-[10px] text-purple-400 font-bold uppercase">Dias</span>
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
+                            <span id="res-dias" class="block text-xl font-extrabold text-gray-700">--</span>
+                            <span class="text-[9px] text-gray-400 font-bold uppercase">Dias</span>
                         </div>
                     </div>
                 </div>
 
-                 <div class="mt-6 flex justify-end">
-                     <button onclick="fecharModalIdade()" class="bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold py-2 px-6 rounded-xl transition">Fechar</button>
+                 <div class="mt-5 flex justify-end border-t border-gray-100 pt-4">
+                     <button onclick="fecharModalIdade()" class="bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-bold py-2 px-5 rounded-lg transition">Fechar</button>
                 </div>
             </div>
         </div>
