@@ -1,8 +1,8 @@
 // Local: js/logs.js
 
 let logsSubscription = null;
-let cacheNomesLogs = {}; // Cache de nomes
-let logsPorUsuario = {}; // Armazena logs agrupados na memória
+let cacheNomesLogs = {}; // Cache de nomes { "joao.silva": "João Silva" }
+let logsPorUsuario = {}; // Armazena TODOS os logs agrupados na memória: { "joao": [...logs] }
 
 // --- DICIONÁRIO DE TRADUÇÃO ---
 const dicionarioAcoes = {
@@ -20,18 +20,16 @@ const dicionarioAcoes = {
 };
 
 async function carregarLogs() {
-    // Referência ao container principal da view de logs
     const viewLogsSection = document.getElementById('view-logs');
     if (!viewLogsSection) return;
 
-    // 1. Preparar o layout para o novo formato (Agrupado por Usuário)
-    // Vamos substituir o grid de 3 colunas original por um container dinâmico
+    // 1. Preparar o layout
     let containerGeral = document.getElementById('container-logs-agrupados');
     
     if (!containerGeral) {
-        // Limpa o conteúdo original (as 3 colunas fixas) e cria o novo container
+        // Esconde o grid antigo se existir e cria o novo
         const conteudoOriginal = viewLogsSection.querySelector('.grid');
-        if(conteudoOriginal) conteudoOriginal.classList.add('hidden'); // Esconde o original em vez de apagar
+        if(conteudoOriginal) conteudoOriginal.classList.add('hidden');
         
         containerGeral = document.createElement('div');
         containerGeral.id = 'container-logs-agrupados';
@@ -45,11 +43,11 @@ async function carregarLogs() {
         // 2. Carregar Nomes
         await carregarNomesParaCache();
 
-        // 3. Busca TODOS os logs (Sem limite)
+        // 3. Busca TODOS os logs ordenados por data
         const { data, error } = await _supabase
             .from('logs')
             .select('*')
-            .order('data_hora', { ascending: false }); // Do mais recente para o mais antigo
+            .order('data_hora', { ascending: false });
 
         if (error) throw error;
 
@@ -61,8 +59,8 @@ async function carregarLogs() {
             logsPorUsuario[userKey].push(log);
         });
 
-        // 5. Renderizar na tela
-        renderizarLogsAgrupados();
+        // 5. Renderizar (Padrão: Top 5 Recentes)
+        filtrarLogs(''); 
 
         // 6. Inicia Realtime
         iniciarEscutaRealtime();
@@ -73,27 +71,54 @@ async function carregarLogs() {
     }
 }
 
-function renderizarLogsAgrupados() {
+// --- FUNÇÃO DE BUSCA E RENDERIZAÇÃO ---
+function filtrarLogs(termo = '') {
     const container = document.getElementById('container-logs-agrupados');
     if (!container) return;
     
-    container.innerHTML = ''; // Limpa loading
+    container.innerHTML = '';
+    const termoLower = termo.toLowerCase().trim();
 
-    // Ordenar usuários: Usuário logado primeiro, depois alfabético? Ou quem tem log mais recente?
-    // Vamos ordenar por quem tem o log mais recente (já que a query veio ordenada por data)
+    // 1. Identificar usuários relevantes
+    // Ordena usuários por atividade mais recente (o primeiro log do array é o mais novo)
     const usuariosOrdenados = Object.keys(logsPorUsuario).sort((a, b) => {
-        // Pega a data do log mais recente de cada um
         const dataA = logsPorUsuario[a][0]?.data_hora || 0;
         const dataB = logsPorUsuario[b][0]?.data_hora || 0;
-        return dataA < dataB ? 1 : -1; // Mais recente primeiro
+        return dataA < dataB ? 1 : -1; 
     });
 
-    if (usuariosOrdenados.length === 0) {
-        container.innerHTML = '<p class="col-span-full text-center text-gray-400">Nenhum log encontrado.</p>';
+    let usuariosParaExibir = [];
+
+    if (!termoLower) {
+        // CENÁRIO 1: Sem busca -> Mostra apenas TOP 5 recentes
+        usuariosParaExibir = usuariosOrdenados.slice(0, 5);
+    } else {
+        // CENÁRIO 2: Com busca -> Filtra em tudo
+        usuariosParaExibir = usuariosOrdenados.filter(userKey => {
+            const nomeReal = (cacheNomesLogs[userKey] || '').toLowerCase();
+            const username = userKey.toLowerCase();
+            
+            // Verifica se o nome ou username bate com a busca
+            if (nomeReal.includes(termoLower) || username.includes(termoLower)) return true;
+
+            // Verifica se ALGUM log desse usuário contém o termo
+            const temLogComTermo = logsPorUsuario[userKey].some(log => {
+                const detalhe = (log.detalhe || '').toLowerCase();
+                const acao = (log.acao || '').toLowerCase();
+                return detalhe.includes(termoLower) || acao.includes(termoLower);
+            });
+
+            return temLogComTermo;
+        });
+    }
+
+    if (usuariosParaExibir.length === 0) {
+        container.innerHTML = '<p class="col-span-full text-center text-gray-400 mt-10">Nenhum registro encontrado para esta busca.</p>';
         return;
     }
 
-    usuariosOrdenados.forEach(userKey => {
+    // Renderiza os cards filtrados
+    usuariosParaExibir.forEach(userKey => {
         criarCardUsuario(userKey, logsPorUsuario[userKey], container);
     });
 }
@@ -102,12 +127,10 @@ function criarCardUsuario(userKey, logs, containerPai) {
     const nomeExibicao = cacheNomesLogs[userKey] || userKey;
     const totalLogs = logs.length;
     
-    // Cria o card do usuário
     const card = document.createElement('div');
     card.className = 'bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px] animate-fade-in-down';
     card.id = `card-user-${userKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
-    // Cabeçalho do Card
     card.innerHTML = `
         <div class="bg-gray-50 px-4 py-3 border-b border-gray-100 flex justify-between items-center shrink-0">
             <div class="flex items-center gap-2 overflow-hidden">
@@ -129,7 +152,7 @@ function criarCardUsuario(userKey, logs, containerPai) {
 
     containerPai.appendChild(card);
 
-    // Preenche a lista de logs deste usuário
+    // Renderiza os logs dentro do card
     const listaContainer = card.querySelector(`#lista-logs-${userKey.replace(/[^a-zA-Z0-9]/g, '-')}`);
     logs.forEach(log => {
         listaContainer.insertAdjacentHTML('beforeend', gerarHtmlLogItem(log));
@@ -137,7 +160,6 @@ function criarCardUsuario(userKey, logs, containerPai) {
 }
 
 function gerarHtmlLogItem(log, destaque = false) {
-    // Tradução e ícones
     const acaoOriginal = log.acao ? log.acao.toUpperCase() : '';
     const acaoLegivel = dicionarioAcoes[acaoOriginal] || acaoOriginal;
     
@@ -149,11 +171,15 @@ function gerarHtmlLogItem(log, destaque = false) {
     else if (acaoOriginal.includes('EXCLUIR')) { corTexto = 'text-red-500'; icone = 'fa-trash'; }
     else if (acaoOriginal.includes('EDITAR')) { corTexto = 'text-orange-500'; icone = 'fa-pen'; }
 
-    // --- CORREÇÃO DA DATA (UTC) ---
-    // Usamos UTC para garantir que o dia 19 permaneça dia 19, independente do horário
+    // --- DATA APENAS (UTC Fix) ---
     const dataObj = new Date(log.data_hora);
-    const dataFormatada = dataObj.toLocaleDateString('pt-BR', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: '2-digit' });
-    const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
+    // Removemos o horário. Mantemos UTC para evitar erro de dia anterior.
+    const dataFormatada = dataObj.toLocaleDateString('pt-BR', { 
+        timeZone: 'UTC', 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: '2-digit' // DD/MM/AA
+    });
 
     const bgClass = destaque ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-100 hover:bg-gray-100';
 
@@ -163,7 +189,7 @@ function gerarHtmlLogItem(log, destaque = false) {
             <div class="flex-1 min-w-0">
                 <div class="flex justify-between items-baseline">
                     <p class="text-[10px] font-extrabold uppercase ${corTexto}">${acaoLegivel}</p>
-                    <span class="text-[9px] font-mono text-gray-400" title="${dataObj.toISOString()}">${dataFormatada} ${horaFormatada}</span>
+                    <span class="text-[9px] font-mono text-gray-400" title="Data Registro">${dataFormatada}</span>
                 </div>
                 <p class="text-[10px] text-gray-500 leading-tight mt-0.5 break-words">${log.detalhe || ''}</p>
             </div>
@@ -183,12 +209,11 @@ function iniciarEscutaRealtime() {
             async (payload) => {
                 const newLog = payload.new;
                 
-                // Verifica se usuário existe no cache, senão busca
                 if (!cacheNomesLogs[newLog.usuario]) await carregarNomesParaCache();
                 
-                // Atualiza estrutura de dados
+                // Atualiza a memória
                 if (!logsPorUsuario[newLog.usuario]) logsPorUsuario[newLog.usuario] = [];
-                logsPorUsuario[newLog.usuario].unshift(newLog); // Adiciona no início
+                logsPorUsuario[newLog.usuario].unshift(newLog); // Novo log no topo
                 
                 atualizarInterfaceRealtime(newLog);
             }
@@ -201,9 +226,12 @@ function atualizarInterfaceRealtime(log) {
     const safeId = userKey.replace(/[^a-zA-Z0-9]/g, '-');
     const listaId = `lista-logs-${safeId}`;
     const listaEl = document.getElementById(listaId);
+    
+    // Verifica se estamos em modo de busca (input com texto)
+    const buscaAtiva = document.getElementById('global-search').value.trim() !== '';
 
     if (listaEl) {
-        // Se o card do usuário já existe, adiciona no topo
+        // Se o card já está na tela, apenas insere o log no topo
         const html = gerarHtmlLogItem(log, true);
         listaEl.insertAdjacentHTML('afterbegin', html);
         
@@ -214,15 +242,14 @@ function atualizarInterfaceRealtime(log) {
             cardHeader.innerText = count;
         }
     } else {
-        // Se o card não existe (primeiro log do usuário), recarrega tudo para criar o card
-        // ou cria dinamicamente (para simplificar, recarregamos a view se for usuário novo)
-        const container = document.getElementById('container-logs-agrupados');
-        if(container) {
-             criarCardUsuario(userKey, [log], container);
-             // Move o card novo para o começo (opcional)
-             const cardNovo = document.getElementById(`card-user-${safeId}`);
-             if(cardNovo) container.prepend(cardNovo);
-        }
+        // O card NÃO está na tela.
+        // Se NÃO estiver buscando nada, o usuário deve aparecer pois agora ele é o mais recente (Top 1)
+        if (!buscaAtiva) {
+            filtrarLogs(''); // Refaz a renderização do Top 5, o novo usuário aparecerá em primeiro
+        } 
+        // Se estiver buscando, só atualizamos se o log novo coincidir com a busca, 
+        // mas para simplificar, deixamos o usuário rodar a busca novamente ou recarregamos se for crítico.
+        // A opção mais fluida aqui é chamar filtrarLogs se o termo bater, mas filtrarLogs('') é seguro.
     }
 }
 
