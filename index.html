@@ -10,20 +10,24 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 
     <style>
         body { font-family: 'Nunito', sans-serif; background-color: #f3f4f6; }
         .nav-item.active { background-color: #1e40af; color: white; }
         .nav-item { transition: all 0.2s; border-radius: 0.5rem; }
         .nav-item:hover { background-color: #334155; color: white; }
+        
+        /* Scrollbar Personalizada */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Estilos Específicos */
         .header-select {
             background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
             background-position: right 0.5rem center;
@@ -32,11 +36,16 @@
             padding-right: 2rem;
             -webkit-appearance: none; appearance: none;
         }
+        
+        /* Animações */
         @keyframes fadeIn { from { opacity: 0; transform: scale(0.98); } to { opacity: 1; transform: scale(1); } }
         .modal-content { animation: fadeIn 0.2s ease-out forwards; }
+        
+        /* Chat Widget */
         .chat-widget { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: bottom right; }
         .chat-open { transform: scale(1); opacity: 1; pointer-events: auto; }
         .chat-closed { transform: scale(0.9); opacity: 0; pointer-events: none; display: none; }
+        
         .dash-card:hover { transform: translateY(-5px); }
         .quick-input { transition: all 0.2s; border: 1px solid #e2e8f0; }
         .quick-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); background: white; }
@@ -73,17 +82,17 @@
     <div id="modal-cep" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden modal-content relative">
             <div class="bg-blue-600 px-8 py-5 border-b border-blue-500 flex justify-between items-center text-white">
-                <h3 class="text-xl font-extrabold flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Endereço Encontrado</h3>
+                <h3 class="text-xl font-extrabold flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Endereço</h3>
                 <button onclick="fecharModalCEP()" class="text-blue-200 hover:text-white transition text-xl"><i class="fas fa-times"></i></button>
             </div>
             <div class="p-8">
                 <div class="flex gap-2 mb-6">
-                    <input type="text" id="cep-input" placeholder="Digite o CEP (apenas números)" maxlength="9" class="flex-1 p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 font-bold text-gray-700" onkeyup="if(event.key === 'Enter') buscarCEP()">
+                    <input type="text" id="cep-input" placeholder="Digite o CEP" maxlength="9" class="flex-1 p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-gray-50 font-bold text-gray-700" onkeyup="if(event.key === 'Enter') buscarCEP()">
                     <button onclick="buscarCEP()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 rounded-xl transition shadow-lg"><i class="fas fa-search"></i></button>
                 </div>
                 <div id="cep-resultado" class="hidden space-y-4 bg-gray-50 p-5 rounded-xl border border-gray-100">
                     <div><label class="text-[10px] uppercase font-extrabold text-blue-500 tracking-wider">CEP</label><p id="cep-display-num" class="text-lg font-bold text-gray-800 border-b border-gray-200 pb-1 mt-0.5">...</p></div>
-                    <div><label class="text-[10px] uppercase font-extrabold text-blue-500 tracking-wider">Rua / Logradouro</label><p id="cep-logradouro" class="text-base font-medium text-gray-700 border-b border-gray-200 pb-1 mt-0.5">...</p></div>
+                    <div><label class="text-[10px] uppercase font-extrabold text-blue-500 tracking-wider">Rua</label><p id="cep-logradouro" class="text-base font-medium text-gray-700 border-b border-gray-200 pb-1 mt-0.5">...</p></div>
                     <div class="grid grid-cols-2 gap-4">
                         <div><label class="text-[10px] uppercase font-extrabold text-blue-500 tracking-wider">Bairro</label><p id="cep-bairro" class="text-base font-medium text-gray-700 border-b border-gray-200 pb-1 mt-0.5">...</p></div>
                         <div><label class="text-[10px] uppercase font-extrabold text-blue-500 tracking-wider">Cidade/UF</label><p id="cep-localidade" class="text-base font-medium text-gray-700 border-b border-gray-200 pb-1 mt-0.5">...</p></div>
@@ -99,56 +108,31 @@
 
     <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden modal-content relative">
-            
             <div class="bg-blue-600 px-6 py-4 border-b border-blue-500 flex justify-between items-center text-white">
-                <h3 class="text-lg font-extrabold flex items-center gap-2">
-                    <i class="fas fa-calculator"></i> Calculadora de Datas
-                </h3>
-                <button onclick="fecharModalIdade()" class="text-blue-200 hover:text-white transition text-lg">
-                    <i class="fas fa-times"></i>
-                </button>
+                <h3 class="text-lg font-extrabold flex items-center gap-2"><i class="fas fa-calculator"></i> Calculadora</h3>
+                <button onclick="fecharModalIdade()" class="text-blue-200 hover:text-white transition text-lg"><i class="fas fa-times"></i></button>
             </div>
-            
             <div class="p-6">
                 <div class="hidden"><input id="nasc-input"></div>
-                
                 <div id="idade-resultado-box" class="hidden">
-                    
                     <div class="flex flex-col sm:flex-row gap-4 mb-5">
                         <div class="bg-blue-50 p-3 rounded-xl border border-blue-100 flex flex-col justify-center items-center w-full sm:w-1/3">
                             <span class="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Data</span>
                             <p id="data-nasc-display" class="text-base font-extrabold text-blue-700 mt-0.5">--/--/----</p>
                         </div>
-
                         <div class="bg-blue-600 text-white p-3 rounded-xl shadow-md shadow-blue-200 flex flex-col justify-center items-center w-full sm:w-2/3 transform transition hover:scale-[1.02]">
                              <span id="res-total-dias" class="text-3xl font-extrabold leading-none">0</span>
-                             <span class="text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">Dias Totais Corridos</span>
+                             <span class="text-[10px] font-bold uppercase tracking-widest opacity-80 mt-1">Dias Corridos</span>
                         </div>
                     </div>
-
                     <div class="grid grid-cols-4 gap-2">
-                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
-                            <span id="res-anos" class="block text-xl font-extrabold text-gray-700">--</span>
-                            <span class="text-[9px] text-gray-400 font-bold uppercase">Anos</span>
-                        </div>
-                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
-                            <span id="res-meses" class="block text-xl font-extrabold text-gray-700">--</span>
-                            <span class="text-[9px] text-gray-400 font-bold uppercase">Meses</span>
-                        </div>
-                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
-                            <span id="res-semanas" class="block text-xl font-extrabold text-gray-700">--</span>
-                            <span class="text-[9px] text-gray-400 font-bold uppercase">Sem.</span>
-                        </div>
-                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100">
-                            <span id="res-dias" class="block text-xl font-extrabold text-gray-700">--</span>
-                            <span class="text-[9px] text-gray-400 font-bold uppercase">Dias</span>
-                        </div>
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100"><span id="res-anos" class="block text-xl font-extrabold text-gray-700">--</span><span class="text-[9px] text-gray-400 font-bold uppercase">Anos</span></div>
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100"><span id="res-meses" class="block text-xl font-extrabold text-gray-700">--</span><span class="text-[9px] text-gray-400 font-bold uppercase">Meses</span></div>
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100"><span id="res-semanas" class="block text-xl font-extrabold text-gray-700">--</span><span class="text-[9px] text-gray-400 font-bold uppercase">Sem.</span></div>
+                        <div class="bg-gray-50 p-2 rounded-lg text-center border border-gray-100"><span id="res-dias" class="block text-xl font-extrabold text-gray-700">--</span><span class="text-[9px] text-gray-400 font-bold uppercase">Dias</span></div>
                     </div>
                 </div>
-
-                 <div class="mt-5 flex justify-end border-t border-gray-100 pt-4">
-                     <button onclick="fecharModalIdade()" class="bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-bold py-2 px-5 rounded-lg transition">Fechar</button>
-                </div>
+                 <div class="mt-5 flex justify-end border-t border-gray-100 pt-4"><button onclick="fecharModalIdade()" class="bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-bold py-2 px-5 rounded-lg transition">Fechar</button></div>
             </div>
         </div>
     </div>
@@ -216,28 +200,8 @@
         </div>
     </div>
 
-    <div id="modal-motivos" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden modal-content flex flex-col max-h-[85vh]">
-            <div class="bg-orange-50 px-8 py-5 border-b border-orange-100 flex justify-between items-center shrink-0">
-                <div><h3 class="text-xl font-extrabold text-orange-800 flex items-center gap-2"><i class="fas fa-tags"></i> Organizar Motivos</h3><p class="text-xs text-orange-600 mt-1">Mescle duplicatas.</p></div>
-                <button onclick="document.getElementById('modal-motivos').classList.add('hidden')" class="text-orange-400 hover:text-orange-600 transition text-xl"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-0 overflow-y-auto flex-1 bg-white"><table class="w-full text-left text-sm"><tbody id="lista-motivos-unificacao" class="divide-y divide-gray-100"></tbody></table></div>
-            <div class="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-end shrink-0"><button onclick="document.getElementById('modal-motivos').classList.add('hidden'); carregarFrases();" class="bg-white border border-gray-300 hover:bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold transition">Fechar e Atualizar</button></div>
-        </div>
-    </div>
-    <div id="modal-documentos" class="hidden fixed inset-0 z-[80] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden modal-content flex flex-col max-h-[85vh]">
-            <div class="bg-blue-50 px-8 py-5 border-b border-blue-100 flex justify-between items-center shrink-0">
-                <div><h3 class="text-xl font-extrabold text-blue-800 flex items-center gap-2"><i class="fas fa-file-alt"></i> Organizar Docs</h3><p class="text-xs text-blue-600 mt-1">Padronize nomes.</p></div>
-                <button onclick="document.getElementById('modal-documentos').classList.add('hidden')" class="text-blue-400 hover:text-blue-600 transition text-xl"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-0 overflow-y-auto flex-1 bg-white"><table class="w-full text-left text-sm"><tbody id="lista-documentos-unificacao" class="divide-y divide-gray-100"></tbody></table></div>
-            <div class="bg-gray-50 px-8 py-4 border-t border-gray-100 flex justify-end shrink-0"><button onclick="document.getElementById('modal-documentos').classList.add('hidden'); carregarFrases();" class="bg-white border border-gray-300 hover:bg-gray-100 text-gray-600 px-6 py-2 rounded-xl font-bold transition">Fechar e Atualizar</button></div>
-        </div>
-    </div>
-
     <div id="app-flow" class="hidden flex flex-col h-screen">
+        
         <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
             <div class="container mx-auto px-6 h-full flex items-center justify-between">
                 <div class="flex items-center gap-8">
@@ -306,59 +270,30 @@
 
                 <section id="view-dashboard" class="view-section hidden flex-grow space-y-6">
                     <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200"><h4 class="text-xs font-extrabold text-gray-400 uppercase">Usuários (90d)</h4><p id="kpi-users" class="text-3xl font-extrabold text-blue-600">0</p></div>
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200"><h4 class="text-xs font-extrabold text-gray-400 uppercase">Cópias (90d)</h4><p id="kpi-copies" class="text-3xl font-extrabold text-green-500">0</p></div>
-                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200"><h4 class="text-xs font-extrabold text-gray-400 uppercase">Edições (90d)</h4><p id="kpi-edits" class="text-3xl font-extrabold text-yellow-500">0</p></div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200"><h4 class="text-xs font-extrabold text-gray-400 uppercase">Usuários Ativos (90d)</h4><p id="kpi-users" class="text-3xl font-extrabold text-blue-600">0</p></div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200"><h4 class="text-xs font-extrabold text-gray-400 uppercase">Total de Cópias (90d)</h4><p id="kpi-copies" class="text-3xl font-extrabold text-green-500">0</p></div>
+                        <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-200"><h4 class="text-xs font-extrabold text-gray-400 uppercase">Edições Realizadas (90d)</h4><p id="kpi-edits" class="text-3xl font-extrabold text-yellow-500">0</p></div>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div onclick="abrirModalDashboard('RANKING')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-gray-200 cursor-pointer transition flex flex-col items-center text-center"><div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-trophy"></i></div><h4 class="font-bold text-gray-800">Ranking</h4></div>
-                        <div onclick="abrirModalDashboard('TOP')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-gray-200 cursor-pointer transition flex flex-col items-center text-center"><div class="w-12 h-12 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-fire"></i></div><h4 class="font-bold text-gray-800">Top Frases</h4></div>
-                        <div onclick="abrirModalDashboard('GHOSTS')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-gray-200 cursor-pointer transition flex flex-col items-center text-center"><div class="w-12 h-12 bg-gray-100 text-gray-500 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-ghost"></i></div><h4 class="font-bold text-gray-800">Inativos</h4></div>
-                        <div onclick="abrirModalDashboard('AUDIT')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-red-50 cursor-pointer transition flex flex-col items-center text-center hover:bg-red-50"><div class="w-12 h-12 bg-red-100 text-red-500 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-broom"></i></div><h4 class="font-bold text-gray-800">Auditoria</h4></div>
+                        <div onclick="abrirModalDashboard('RANKING')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-gray-200 cursor-pointer transition flex flex-col items-center text-center"><div class="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-trophy"></i></div><h4 class="font-bold text-gray-800">Ranking Colaboradores</h4></div>
+                        <div onclick="abrirModalDashboard('TOP')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-gray-200 cursor-pointer transition flex flex-col items-center text-center"><div class="w-12 h-12 bg-orange-50 text-orange-500 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-fire"></i></div><h4 class="font-bold text-gray-800">Top Frases Utilizadas</h4></div>
+                        <div onclick="abrirModalDashboard('GHOSTS')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-gray-200 cursor-pointer transition flex flex-col items-center text-center"><div class="w-12 h-12 bg-gray-100 text-gray-500 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-ghost"></i></div><h4 class="font-bold text-gray-800">Usuários Inativos</h4></div>
+                        <div onclick="abrirModalDashboard('AUDIT')" class="dash-card bg-white p-6 rounded-2xl shadow-sm border border-red-50 cursor-pointer transition flex flex-col items-center text-center hover:bg-red-50"><div class="w-12 h-12 bg-red-100 text-red-500 rounded-xl flex items-center justify-center text-xl mb-3"><i class="fas fa-broom"></i></div><h4 class="font-bold text-gray-800">Auditoria de Frases</h4></div>
                     </div>
                 </section>
 
                 <section id="view-logs" class="view-section hidden flex-grow space-y-6">
-                    <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10">
-                        </div>
+                    <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
                 </section>
 
                 <section id="view-equipe" class="view-section hidden flex-grow">
-                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                        <div onclick="abrirGerenciadorMotivos()" class="bg-white p-6 rounded-2xl shadow-sm border border-orange-100 cursor-pointer hover:shadow-md transition flex items-center gap-4 group">
-                            <div class="w-12 h-12 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-tags"></i></div>
-                            <div><h4 class="font-bold text-gray-700">Organizar Motivos</h4><p class="text-xs text-gray-400">Mesclar duplicados</p></div>
-                        </div>
-                        <div onclick="abrirGerenciadorDocumentos()" class="bg-white p-6 rounded-2xl shadow-sm border border-blue-100 cursor-pointer hover:shadow-md transition flex items-center gap-4 group">
-                            <div class="w-12 h-12 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-file-alt"></i></div>
-                            <div><h4 class="font-bold text-gray-700">Organizar Documentos</h4><p class="text-xs text-gray-400">Padronizar nomes</p></div>
-                        </div>
-                        <div onclick="padronizarTodasFrases()" class="bg-white p-6 rounded-2xl shadow-sm border border-purple-100 cursor-pointer hover:shadow-md transition flex items-center gap-4 group">
-                            <div class="w-12 h-12 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-magic"></i></div>
-                            <div><h4 class="font-bold text-gray-700">Padronização Mágica</h4><p class="text-xs text-gray-400">Limpar formatação</p></div>
-                        </div>
-                        <div onclick="importarPlanilhaFrases()" class="bg-white p-6 rounded-2xl shadow-sm border border-green-100 cursor-pointer hover:shadow-md transition flex items-center gap-4 group">
-                            <div class="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-file-excel"></i></div>
-                            <div><h4 class="font-bold text-gray-700">Importar Planilha</h4><p class="text-xs text-gray-400">Frases em massa (xlsx)</p></div>
-                        </div>
-                        <input type="file" id="input-import-sheet" class="hidden" accept=".xlsx, .csv" onchange="processarArquivoFrases(this)">
-                    </div>
-
-                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8" id="lista-equipe-container">
-                        </div>
-
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8" id="lista-equipe-container"></div>
                     <div class="bg-white rounded-2xl shadow-sm border border-red-100 p-6">
-                        <h4 class="text-sm font-extrabold text-gray-700 mb-4 flex items-center gap-2">
-                            <i class="fas fa-database text-red-400"></i> Banco de Dados
-                        </h4>
+                        <h4 class="text-sm font-extrabold text-gray-700 mb-4 flex items-center gap-2"><i class="fas fa-database text-red-400"></i> Banco de Dados</h4>
                         <div class="flex flex-col sm:flex-row gap-4">
-                            <button onclick="baixarBackup()" class="flex-1 bg-gray-50 border border-gray-200 text-gray-600 hover:bg-white hover:border-gray-300 font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2">
-                                <i class="fas fa-download"></i> Baixar Backup JSON
-                            </button>
+                            <button onclick="baixarBackup()" class="flex-1 bg-gray-50 border border-gray-200 text-gray-600 hover:bg-white hover:border-gray-300 font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2"><i class="fas fa-download"></i> Baixar Backup JSON</button>
                             <div class="flex-1 relative">
-                                <button onclick="document.getElementById('input-backup').click()" class="w-full bg-red-50 border border-red-100 text-red-600 hover:bg-red-100 font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2">
-                                    <i class="fas fa-upload"></i> Restaurar Backup
-                                </button>
+                                <button onclick="document.getElementById('input-backup').click()" class="w-full bg-red-50 border border-red-100 text-red-600 hover:bg-red-100 font-bold py-3 rounded-xl text-xs transition flex items-center justify-center gap-2"><i class="fas fa-upload"></i> Restaurar Backup</button>
                                 <input type="file" id="input-backup" class="hidden" onchange="importarBackup(this)">
                             </div>
                         </div>
