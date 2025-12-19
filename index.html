@@ -107,11 +107,30 @@
                     <p class="text-xs font-bold text-purple-400 uppercase tracking-widest">Nascimento Informado</p>
                     <p id="data-nasc-display" class="text-lg font-extrabold text-purple-700 mt-1">--/--/----</p>
                 </div>
-                <div id="idade-resultado-box" class="text-center bg-white p-6 rounded-2xl border-2 border-purple-100 shadow-sm hidden">
-                    <p class="text-xs text-gray-400 font-bold uppercase">Idade Atual</p>
-                    <p id="idade-resultado" class="text-6xl font-extrabold text-purple-600 mt-2">--</p>
-                    <p class="text-sm text-gray-500 font-bold mt-1">Anos</p>
+                
+                <div id="idade-resultado-box" class="hidden text-center bg-white p-6 rounded-2xl border-2 border-purple-100 shadow-sm mt-4">
+                    <p class="text-xs text-gray-400 font-bold uppercase mb-4 tracking-widest">Idade Detalhada</p>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-purple-50 p-3 rounded-xl">
+                            <span id="res-anos" class="block text-3xl font-extrabold text-purple-600">--</span>
+                            <span class="text-[10px] text-purple-400 font-bold uppercase">Anos</span>
+                        </div>
+                        <div class="bg-purple-50 p-3 rounded-xl">
+                            <span id="res-meses" class="block text-3xl font-extrabold text-purple-600">--</span>
+                            <span class="text-[10px] text-purple-400 font-bold uppercase">Meses</span>
+                        </div>
+                        <div class="bg-purple-50 p-3 rounded-xl">
+                            <span id="res-semanas" class="block text-3xl font-extrabold text-purple-600">--</span>
+                            <span class="text-[10px] text-purple-400 font-bold uppercase">Semanas</span>
+                        </div>
+                        <div class="bg-purple-50 p-3 rounded-xl">
+                            <span id="res-dias" class="block text-3xl font-extrabold text-purple-600">--</span>
+                            <span class="text-[10px] text-purple-400 font-bold uppercase">Dias</span>
+                        </div>
+                    </div>
                 </div>
+
                  <div class="mt-6 flex justify-end">
                      <button onclick="fecharModalIdade()" class="bg-gray-200 hover:bg-gray-300 text-gray-600 font-bold py-2 px-6 rounded-xl transition">Fechar</button>
                 </div>
