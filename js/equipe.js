@@ -260,7 +260,7 @@ async function tentarDeletarUsuario(id, username, nomeExibicao) {
     }
 }
 
-// Funções Auxiliares (Backup e Gerenciadores)
+// Funções Auxiliares (Backup, Gerenciadores e NOVA IMPORTAÇÃO)
 async function abrirGerenciadorMotivos() { const { data: frases } = await _supabase.from('frases').select('motivo'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.motivo || "Sem Motivo"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-motivos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-orange-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearMotivo('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-motivos').classList.remove('hidden'); }
 async function renomearMotivo(nomeAntigo) { const { value: novoNome } = await Swal.fire({title: 'Renomear Motivo', html: `Todas as frases com motivo <b>"${nomeAntigo}"</b> serão alteradas.`, input: 'text', inputValue: nomeAntigo, showCancelButton: true, confirmButtonText: 'Salvar'}); if (novoNome && novoNome !== nomeAntigo) { const nomeFormatado = formatarTextoBonito(novoNome, 'titulo'); Swal.fire({ title: 'Atualizando...', didOpen: () => Swal.showLoading() }); const { error } = await _supabase.from('frases').update({ motivo: nomeFormatado }).eq('motivo', nomeAntigo); if (!error) { registrarLog('EDITAR', `Renomeou motivo "${nomeAntigo}"`); abrirGerenciadorMotivos(); Swal.fire('Sucesso', '', 'success'); } else Swal.fire('Erro', '', 'error'); } }
 async function abrirGerenciadorDocumentos() { const { data: frases } = await _supabase.from('frases').select('documento'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.documento || "Sem Doc"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-documentos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-blue-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearDocumento('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-documentos').classList.remove('hidden'); }
@@ -269,3 +269,100 @@ async function padronizarTodasFrases() { if(!(await Swal.fire({title: 'Padroniza
 function limparTexto(texto) { if (!texto) return ""; let t = texto.trim(); t = t.replace(/^["']+|["']+$/g, ''); t = t.replace(/\s+/g, ' '); t = t.charAt(0).toUpperCase() + t.slice(1); return t; }
 async function baixarBackup() { const { data: f } = await _supabase.from('frases').select('*'); const { data: u } = await _supabase.from('usuarios').select('*'); const { data: l } = await _supabase.from('logs').select('*'); const blob = new Blob([JSON.stringify({ data: new Date(), sistema: 'Gupy Frases', dados: { frases: f, usuarios: u, logs: l } })], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup_gupy_${new Date().toISOString().slice(0,10)}.json`; a.click(); }
 async function importarBackup(input) { const file = input.files[0]; if(!file) return; const r = new FileReader(); r.onload = async(e) => { try { const b = JSON.parse(e.target.result); Swal.fire({title: 'Restaurando...', didOpen: () => Swal.showLoading()}); if(b.dados.usuarios) await _supabase.from('usuarios').upsert(b.dados.usuarios); if(b.dados.frases) await _supabase.from('frases').upsert(b.dados.frases); if(b.dados.logs) await _supabase.from('logs').upsert(b.dados.logs); Swal.fire('Restaurado!', '', 'success').then(()=>location.reload()); } catch(err){ Swal.fire('Erro', err.message, 'error'); } }; r.readAsText(file); input.value = ''; }
+
+// --- NOVA FUNÇÃO DE IMPORTAÇÃO (XLSX) ---
+function importarPlanilhaFrases() { document.getElementById('input-import-sheet').click(); }
+
+async function processarArquivoFrases(input) {
+    const file = input.files[0];
+    if(!file) return;
+
+    Swal.fire({ title: 'Processando Planilha...', html: 'Aguarde enquanto lemos e validamos os dados.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonDados = XLSX.utils.sheet_to_json(worksheet);
+
+            if (!jsonDados.length) {
+                input.value = ''; // Limpa o input
+                return Swal.fire('Vazio', 'A planilha não contém dados.', 'warning');
+            }
+
+            // Carrega frases existentes para evitar duplicatas
+            const { data: frasesExistentes } = await _supabase.from('frases').select('conteudo');
+            
+            // Função auxiliar de hash (igual à da biblioteca.js) para comparação "top"
+            const gerarHash = (texto) => {
+                if(!texto) return "";
+                return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+            };
+
+            const hashesExistentes = new Set((frasesExistentes || []).map(f => gerarHash(f.conteudo)));
+            
+            let importados = 0;
+            let duplicados = 0;
+            const loteParaInserir = [];
+
+            for (const linha of jsonDados) {
+                // Tenta mapear nomes de colunas comuns
+                const empresa = linha['Empresa'] || linha['empresa'] || 'Geral';
+                const motivo = linha['Motivo'] || linha['motivo'] || 'Importado';
+                const conteudo = linha['Conteúdo'] || linha['conteudo'] || linha['Frase'] || linha['frase'];
+                const documento = linha['Documento'] || linha['documento'] || 'Doc';
+
+                if (!conteudo) continue; // Pula linha sem frase
+
+                // Limpeza básica
+                let conteudoLimpo = conteudo.toString().trim();
+                conteudoLimpo = conteudoLimpo.charAt(0).toUpperCase() + conteudoLimpo.slice(1);
+                
+                const hashAtual = gerarHash(conteudoLimpo);
+
+                if (hashesExistentes.has(hashAtual)) {
+                    duplicados++;
+                } else {
+                    // Prepara o objeto para inserção
+                    loteParaInserir.push({
+                        empresa: formatarTextoBonito(empresa.toString(), 'titulo'),
+                        motivo: formatarTextoBonito(motivo.toString(), 'titulo'),
+                        documento: formatarTextoBonito(documento.toString(), 'titulo'),
+                        conteudo: conteudoLimpo,
+                        revisado_por: usuarioLogado.username
+                    });
+                    
+                    // Adiciona ao set temporário para evitar duplicatas DENTRO da própria planilha
+                    hashesExistentes.add(hashAtual);
+                    importados++;
+                }
+            }
+
+            if (loteParaInserir.length > 0) {
+                // Insere em massa
+                const { error } = await _supabase.from('frases').insert(loteParaInserir);
+                if (error) throw error;
+                
+                await registrarLog('IMPORTACAO', `Importou ${importados} frases via Excel`);
+                
+                Swal.fire({
+                    title: 'Importação Concluída!',
+                    html: `<b>${importados}</b> frases novas adicionadas.<br><b>${duplicados}</b> duplicatas ignoradas.`,
+                    icon: 'success'
+                });
+            } else {
+                Swal.fire('Nada novo', `Todas as ${duplicados} frases da planilha já existiam no sistema.`, 'info');
+            }
+
+        } catch (err) {
+            console.error(err);
+            Swal.fire('Erro na Importação', 'Verifique se o arquivo é um Excel/CSV válido.', 'error');
+        } finally {
+            input.value = ''; // Limpa o input para permitir re-seleção do mesmo arquivo se necessário
+        }
+    };
+    reader.readAsArrayBuffer(file);
+}
