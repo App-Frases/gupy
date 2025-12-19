@@ -190,7 +190,7 @@ async function buscarCEP() {
     } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na busca', 'error'); }
 }
 
-// --- FUNÇÃO CALCULAR IDADE (ANOS, MESES, SEMANAS, DIAS) ---
+// --- FUNÇÃO CALCULADORA DE DATAS (ANOS, MESES, SEMANAS, DIAS + TOTAL DIAS) ---
 function calcularIdade() {
     const val = document.getElementById('nasc-input').value; 
     const parts = val.split('/'); 
@@ -205,15 +205,24 @@ function calcularIdade() {
         return Swal.fire('Erro', 'Data inválida', 'error');
     }
 
-    const nascimento = new Date(anoNasc, mesNasc - 1, diaNasc);
+    const dataInput = new Date(anoNasc, mesNasc - 1, diaNasc);
     const hoje = new Date();
     
-    if (nascimento > hoje) return Swal.fire('Erro', 'Data futura não permitida', 'warning');
+    // Zera as horas para cálculo preciso de dias corridos
+    dataInput.setHours(0,0,0,0);
+    hoje.setHours(0,0,0,0);
+    
+    if (dataInput > hoje) return Swal.fire('Erro', 'Data futura não permitida', 'warning');
 
-    // Cálculos base
-    let anos = hoje.getFullYear() - nascimento.getFullYear();
-    let meses = hoje.getMonth() - nascimento.getMonth();
-    let dias = hoje.getDate() - nascimento.getDate();
+    // 1. Cálculo de Dias Totais (Destaque)
+    // Diferença em milissegundos convertida para dias
+    const diffTime = Math.abs(hoje - dataInput);
+    const totalDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // 2. Cálculos Detalhados (Anos/Meses/Dias)
+    let anos = hoje.getFullYear() - dataInput.getFullYear();
+    let meses = hoje.getMonth() - dataInput.getMonth();
+    let dias = hoje.getDate() - dataInput.getDate();
 
     // Ajuste de dias negativos (pegando dias do mês anterior)
     if (dias < 0) {
@@ -236,7 +245,11 @@ function calcularIdade() {
     // Atualiza a interface
     document.getElementById('data-nasc-display').innerText = val;
     
-    // Preenche os novos campos do grid
+    // Preenche o novo campo de Total com formatação de milhar (ex: 10.500)
+    const elTotal = document.getElementById('res-total-dias');
+    if(elTotal) elTotal.innerText = totalDias.toLocaleString('pt-BR'); 
+
+    // Preenche os campos do grid detalhado
     document.getElementById('res-anos').innerText = anos;
     document.getElementById('res-meses').innerText = meses;
     document.getElementById('res-semanas').innerText = semanas;
