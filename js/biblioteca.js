@@ -10,6 +10,7 @@ async function carregarFrases() {
         const mapUso = {}; 
         if(logs) logs.forEach(l => mapUso[l.detalhe] = (mapUso[l.detalhe]||0)+1);
         
+        // Cria um campo de busca normalizado para facilitar o filtro visual também
         cacheFrases = (data||[]).map(f => ({...f, qtd_usos: mapUso[f.id]||0, _busca: normalizar(f.conteudo+f.empresa+f.motivo+f.documento)}));
         cacheFrases.sort((a,b)=>b.qtd_usos - a.qtd_usos);
         
@@ -114,18 +115,32 @@ async function salvarFrase() {
     
     if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
 
-    // --- VALIDAÇÃO DE DUPLICIDADE ---
+    // --- VALIDAÇÃO "TOP" DE DUPLICIDADE (IGNORA PONTUAÇÃO/ESPAÇO/ACENTO) ---
+    // Função auxiliar para gerar a "impressão digital" do texto
+    const gerarHash = (texto) => {
+        return texto
+            .toLowerCase() // tudo minúsculo
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // remove acentos
+            .replace(/[^a-z0-9]/g, ""); // remove TUDO que não for letra ou número (espaços, pontos, vírgulas, etc)
+    };
+
+    const hashNovo = gerarHash(conteudoLimpo);
+
     const existeDuplicada = cacheFrases.find(f => {
-        // Ignora a própria frase se for edição (id deve ser diferente)
-        if (id && f.id == id) return false;
-        // Compara conteúdo ignorando maiúsculas/minúsculas
-        return f.conteudo.trim().toLowerCase() === conteudoLimpo.toLowerCase();
+        if (id && f.id == id) return false; // Ignora edição do mesmo item
+        return gerarHash(f.conteudo) === hashNovo;
     });
 
     if (existeDuplicada) {
-        return Swal.fire('Duplicidade', 'Esta frase já existe na biblioteca.', 'warning');
+        // Mostra qual é a frase parecida para o usuário entender
+        return Swal.fire({
+            title: 'Frase Duplicada!',
+            text: 'Encontramos uma frase praticamente igual (ignorando pontuações e espaços).',
+            icon: 'warning',
+            footer: 'Evite criar registros repetidos.'
+        });
     }
-    // --------------------------------
+    // -------------------------------------------------------------------
 
     const dados = { 
         empresa: formatarTextoBonito(document.getElementById('inp-empresa').value, 'titulo'), 
