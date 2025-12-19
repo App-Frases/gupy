@@ -1,71 +1,235 @@
 // Local: js/logs.js
 
 let logsSubscription = null;
-let cacheNomesLogs = {}; // Armazena: { "joao.silva": "João Silva", ... }
+let cacheNomesLogs = {}; // Cache de nomes
+let logsPorUsuario = {}; // Armazena logs agrupados na memória
 
-// --- DICIONÁRIO DE TRADUÇÃO (Códigos -> Texto Humano) ---
+// --- DICIONÁRIO DE TRADUÇÃO ---
 const dicionarioAcoes = {
-    'LOGIN': '🔑 Entrou no Sistema',
+    'LOGIN': '🔑 Entrou',
     'ACESSO': '👋 Acessou',
-    'COPIAR_RANK': '📋 Copiou uma frase',
-    'CRIAR': '✨ Criou novo registro',
-    'CRIAR_USER': '👤 Cadastrou usuário',
-    'EDITAR': '✏️ Editou informações',
-    'EDITAR_USER': '🔧 Alterou usuário',
-    'EXCLUIR': '🗑️ Removeu registro',
-    'EXCLUIR_USER': '🚫 Removeu usuário',
-    'IMPORTACAO': '📂 Importou planilha',
-    'LIMPEZA': '🧹 Padronizou frases'
+    'COPIAR_RANK': '📋 Copiou',
+    'CRIAR': '✨ Criou',
+    'CRIAR_USER': '👤 Add User',
+    'EDITAR': '✏️ Editou',
+    'EDITAR_USER': '🔧 Alt. User',
+    'EXCLUIR': '🗑️ Removeu',
+    'EXCLUIR_USER': '🚫 Del User',
+    'IMPORTACAO': '📂 Importou',
+    'LIMPEZA': '🧹 Limpeza'
 };
 
 async function carregarLogs() {
-    const containerAcessos = document.getElementById('col-acessos');
-    const containerUso = document.getElementById('col-uso');
-    const containerAuditoria = document.getElementById('col-auditoria');
+    // Referência ao container principal da view de logs
+    const viewLogsSection = document.getElementById('view-logs');
+    if (!viewLogsSection) return;
 
-    // Estado de "Carregando..."
-    const loadingHTML = '<p class="text-center text-gray-300 text-xs py-10 animate-pulse">Carregando histórico...</p>';
-    if(containerAcessos) containerAcessos.innerHTML = loadingHTML;
-    if(containerUso) containerUso.innerHTML = loadingHTML;
-    if(containerAuditoria) containerAuditoria.innerHTML = loadingHTML;
+    // 1. Preparar o layout para o novo formato (Agrupado por Usuário)
+    // Vamos substituir o grid de 3 colunas original por um container dinâmico
+    let containerGeral = document.getElementById('container-logs-agrupados');
+    
+    if (!containerGeral) {
+        // Limpa o conteúdo original (as 3 colunas fixas) e cria o novo container
+        const conteudoOriginal = viewLogsSection.querySelector('.grid');
+        if(conteudoOriginal) conteudoOriginal.classList.add('hidden'); // Esconde o original em vez de apagar
+        
+        containerGeral = document.createElement('div');
+        containerGeral.id = 'container-logs-agrupados';
+        containerGeral.className = 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10';
+        viewLogsSection.appendChild(containerGeral);
+    }
+
+    containerGeral.innerHTML = '<p class="col-span-full text-center text-gray-400 py-10 animate-pulse">Carregando histórico completo...</p>';
 
     try {
-        // 1. Primeiro, carregamos os NOMES REAIS dos usuários para o cache
+        // 2. Carregar Nomes
         await carregarNomesParaCache();
 
-        // 2. Busca os últimos 50 logs
+        // 3. Busca TODOS os logs (Sem limite)
         const { data, error } = await _supabase
             .from('logs')
             .select('*')
-            .order('data_hora', { ascending: false })
-            .limit(50);
+            .order('data_hora', { ascending: false }); // Do mais recente para o mais antigo
 
         if (error) throw error;
 
-        // Limpa os containers antes de preencher
-        limparContainers();
+        // 4. Agrupar logs em memória
+        logsPorUsuario = {};
+        data.forEach(log => {
+            const userKey = log.usuario || 'Desconhecido';
+            if (!logsPorUsuario[userKey]) logsPorUsuario[userKey] = [];
+            logsPorUsuario[userKey].push(log);
+        });
 
-        // Distribui os logs históricos
-        data.forEach(log => adicionarLogNaTela(log, false)); 
+        // 5. Renderizar na tela
+        renderizarLogsAgrupados();
 
-        // 3. Inicia a escuta em tempo real (garante que não duplique)
+        // 6. Inicia Realtime
         iniciarEscutaRealtime();
 
     } catch (e) {
         console.error("Erro ao carregar logs:", e);
-        Swal.fire('Erro', 'Não foi possível carregar o histórico.', 'error');
+        Swal.fire('Erro', 'Falha ao carregar logs.', 'error');
     }
 }
 
-// Função auxiliar para buscar nomes reais
+function renderizarLogsAgrupados() {
+    const container = document.getElementById('container-logs-agrupados');
+    if (!container) return;
+    
+    container.innerHTML = ''; // Limpa loading
+
+    // Ordenar usuários: Usuário logado primeiro, depois alfabético? Ou quem tem log mais recente?
+    // Vamos ordenar por quem tem o log mais recente (já que a query veio ordenada por data)
+    const usuariosOrdenados = Object.keys(logsPorUsuario).sort((a, b) => {
+        // Pega a data do log mais recente de cada um
+        const dataA = logsPorUsuario[a][0]?.data_hora || 0;
+        const dataB = logsPorUsuario[b][0]?.data_hora || 0;
+        return dataA < dataB ? 1 : -1; // Mais recente primeiro
+    });
+
+    if (usuariosOrdenados.length === 0) {
+        container.innerHTML = '<p class="col-span-full text-center text-gray-400">Nenhum log encontrado.</p>';
+        return;
+    }
+
+    usuariosOrdenados.forEach(userKey => {
+        criarCardUsuario(userKey, logsPorUsuario[userKey], container);
+    });
+}
+
+function criarCardUsuario(userKey, logs, containerPai) {
+    const nomeExibicao = cacheNomesLogs[userKey] || userKey;
+    const totalLogs = logs.length;
+    
+    // Cria o card do usuário
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-[500px] animate-fade-in-down';
+    card.id = `card-user-${userKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+
+    // Cabeçalho do Card
+    card.innerHTML = `
+        <div class="bg-gray-50 px-4 py-3 border-b border-gray-100 flex justify-between items-center shrink-0">
+            <div class="flex items-center gap-2 overflow-hidden">
+                <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs shrink-0">
+                    ${userKey.charAt(0).toUpperCase()}
+                </div>
+                <div class="min-w-0">
+                    <h3 class="font-extrabold text-gray-700 text-sm truncate" title="${nomeExibicao}">${nomeExibicao}</h3>
+                    <p class="text-[10px] text-gray-400 font-mono truncate">@${userKey}</p>
+                </div>
+            </div>
+            <span class="text-[10px] font-bold bg-blue-50 text-blue-600 px-2 py-1 rounded-full border border-blue-100 shrink-0">
+                ${totalLogs}
+            </span>
+        </div>
+        <div class="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar" id="lista-logs-${userKey.replace(/[^a-zA-Z0-9]/g, '-')}">
+            </div>
+    `;
+
+    containerPai.appendChild(card);
+
+    // Preenche a lista de logs deste usuário
+    const listaContainer = card.querySelector(`#lista-logs-${userKey.replace(/[^a-zA-Z0-9]/g, '-')}`);
+    logs.forEach(log => {
+        listaContainer.insertAdjacentHTML('beforeend', gerarHtmlLogItem(log));
+    });
+}
+
+function gerarHtmlLogItem(log, destaque = false) {
+    // Tradução e ícones
+    const acaoOriginal = log.acao ? log.acao.toUpperCase() : '';
+    const acaoLegivel = dicionarioAcoes[acaoOriginal] || acaoOriginal;
+    
+    let corTexto = 'text-gray-600';
+    let icone = 'fa-circle';
+    
+    if (acaoOriginal.includes('LOGIN')) { corTexto = 'text-green-600'; icone = 'fa-key'; }
+    else if (acaoOriginal.includes('CRIAR')) { corTexto = 'text-blue-600'; icone = 'fa-plus'; }
+    else if (acaoOriginal.includes('EXCLUIR')) { corTexto = 'text-red-500'; icone = 'fa-trash'; }
+    else if (acaoOriginal.includes('EDITAR')) { corTexto = 'text-orange-500'; icone = 'fa-pen'; }
+
+    // --- CORREÇÃO DA DATA (UTC) ---
+    // Usamos UTC para garantir que o dia 19 permaneça dia 19, independente do horário
+    const dataObj = new Date(log.data_hora);
+    const dataFormatada = dataObj.toLocaleDateString('pt-BR', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: '2-digit' });
+    const horaFormatada = dataObj.toLocaleTimeString('pt-BR', { timeZone: 'UTC', hour: '2-digit', minute: '2-digit' });
+
+    const bgClass = destaque ? 'bg-yellow-50 border-yellow-200' : 'bg-gray-50 border-gray-100 hover:bg-gray-100';
+
+    return `
+        <div class="p-2 rounded-lg border ${bgClass} flex gap-2 items-start transition-colors">
+            <div class="mt-1 text-[10px] ${corTexto} w-4 text-center shrink-0"><i class="fas ${icone}"></i></div>
+            <div class="flex-1 min-w-0">
+                <div class="flex justify-between items-baseline">
+                    <p class="text-[10px] font-extrabold uppercase ${corTexto}">${acaoLegivel}</p>
+                    <span class="text-[9px] font-mono text-gray-400" title="${dataObj.toISOString()}">${dataFormatada} ${horaFormatada}</span>
+                </div>
+                <p class="text-[10px] text-gray-500 leading-tight mt-0.5 break-words">${log.detalhe || ''}</p>
+            </div>
+        </div>
+    `;
+}
+
+// --- REALTIME ---
+function iniciarEscutaRealtime() {
+    if (logsSubscription) _supabase.removeChannel(logsSubscription);
+
+    logsSubscription = _supabase
+        .channel('logs-realtime-grouped')
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'logs' },
+            async (payload) => {
+                const newLog = payload.new;
+                
+                // Verifica se usuário existe no cache, senão busca
+                if (!cacheNomesLogs[newLog.usuario]) await carregarNomesParaCache();
+                
+                // Atualiza estrutura de dados
+                if (!logsPorUsuario[newLog.usuario]) logsPorUsuario[newLog.usuario] = [];
+                logsPorUsuario[newLog.usuario].unshift(newLog); // Adiciona no início
+                
+                atualizarInterfaceRealtime(newLog);
+            }
+        )
+        .subscribe();
+}
+
+function atualizarInterfaceRealtime(log) {
+    const userKey = log.usuario;
+    const safeId = userKey.replace(/[^a-zA-Z0-9]/g, '-');
+    const listaId = `lista-logs-${safeId}`;
+    const listaEl = document.getElementById(listaId);
+
+    if (listaEl) {
+        // Se o card do usuário já existe, adiciona no topo
+        const html = gerarHtmlLogItem(log, true);
+        listaEl.insertAdjacentHTML('afterbegin', html);
+        
+        // Atualiza contador
+        const cardHeader = listaEl.parentElement.querySelector('.bg-blue-50');
+        if(cardHeader) {
+            const count = parseInt(cardHeader.innerText) + 1;
+            cardHeader.innerText = count;
+        }
+    } else {
+        // Se o card não existe (primeiro log do usuário), recarrega tudo para criar o card
+        // ou cria dinamicamente (para simplificar, recarregamos a view se for usuário novo)
+        const container = document.getElementById('container-logs-agrupados');
+        if(container) {
+             criarCardUsuario(userKey, [log], container);
+             // Move o card novo para o começo (opcional)
+             const cardNovo = document.getElementById(`card-user-${safeId}`);
+             if(cardNovo) container.prepend(cardNovo);
+        }
+    }
+}
+
+// --- AUXILIARES ---
 async function carregarNomesParaCache() {
     const { data } = await _supabase.from('usuarios').select('username, nome');
-    if (data) {
-        data.forEach(u => {
-            // Se tiver nome, usa o nome. Se não, usa o username formatado.
-            cacheNomesLogs[u.username] = u.nome || formatarNome(u.username);
-        });
-    }
+    if (data) data.forEach(u => cacheNomesLogs[u.username] = u.nome || formatarNome(u.username));
 }
 
 function formatarNome(user) {
@@ -73,134 +237,12 @@ function formatarNome(user) {
     return user.charAt(0).toUpperCase() + user.slice(1);
 }
 
-function limparContainers() {
-    const ids = ['col-acessos', 'col-uso', 'col-auditoria'];
-    ids.forEach(id => {
-        const el = document.getElementById(id);
-        if(el) el.innerHTML = '';
-    });
-}
-
-// --- REALTIME ---
-function iniciarEscutaRealtime() {
-    // Se já existe uma subscrição, remove antes de criar outra para evitar duplicidade
-    if (logsSubscription) {
-        _supabase.removeChannel(logsSubscription);
-    }
-
-    logsSubscription = _supabase
-        .channel('tabela-logs-realtime')
-        .on(
-            'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'logs' },
-            async (payload) => {
-                console.log("Novo log recebido em tempo real:", payload.new); // Debug
-
-                // Se chegar um log de um usuário novo que não está no cache, tenta buscar rapidinho
-                if (!cacheNomesLogs[payload.new.usuario]) {
-                    await carregarNomesParaCache();
-                }
-                // Adiciona com animação (true)
-                adicionarLogNaTela(payload.new, true);
-            }
-        )
-        .subscribe();
-}
-
-// --- RENDERIZAÇÃO ---
-function adicionarLogNaTela(log, animar = false) {
-    // 1. Traduzir Ação
-    const acaoOriginal = log.acao ? log.acao.toUpperCase() : '';
-    const acaoLegivel = dicionarioAcoes[acaoOriginal] || acaoOriginal.replace('_', ' ');
-
-    // 2. Traduzir Nome do Usuário
-    const nomeExibicao = cacheNomesLogs[log.usuario] || log.usuario;
-
-    // 3. Definir Categoria e Ícone
-    let containerId = 'col-auditoria'; 
-    let icone = 'fa-info-circle';
-    let corIcone = 'text-gray-400';
-    let corBg = 'bg-gray-50';
-
-    if (acaoOriginal.includes('LOGIN') || acaoOriginal.includes('ACESSO')) {
-        containerId = 'col-acessos';
-        icone = 'fa-key';
-        corIcone = 'text-green-500';
-        corBg = 'bg-green-50';
-    } 
-    else if (acaoOriginal.includes('COPIAR')) {
-        containerId = 'col-uso';
-        icone = 'fa-copy';
-        corIcone = 'text-blue-500';
-        corBg = 'bg-blue-50';
-    } 
-    else if (['CRIAR', 'EDITAR', 'EXCLUIR', 'IMPORTACAO', 'LIMPEZA'].some(k => acaoOriginal.includes(k))) {
-        containerId = 'col-auditoria';
-        icone = 'fa-exclamation-triangle';
-        corIcone = 'text-orange-500';
-        corBg = 'bg-orange-50';
-    }
-
-    const container = document.getElementById(containerId);
-    if (!container) return;
-
-    // 4. Formatação de DATA CORRETA (Sem horário, corrigindo fuso do Brasil)
-    const dataObj = new Date(log.data_hora);
-    
-    // Configuração para forçar o Fuso de SP e mostrar apenas a data numérica
-    const opcoesData = { 
-        timeZone: 'America/Sao_Paulo', 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric' 
-    };
-    
-    // Ex: "19/12/2025"
-    const dataFormatada = dataObj.toLocaleDateString('pt-BR', opcoesData);
-
-    // HTML do Card
-    // Se for 'animar' (realtime), adiciona borda azul e efeito fade
-    const animClasses = animar ? 'animate-fade-in-down border-l-4 border-l-blue-500 bg-blue-50/20' : 'border-l-4 border-l-transparent';
-
-    const html = `
-        <div class="p-3 rounded-lg border border-gray-100 bg-white shadow-sm flex gap-3 items-start transition-all hover:bg-gray-50 ${animClasses}">
-            <div class="mt-1 w-8 h-8 rounded-full ${corBg} flex items-center justify-center shrink-0">
-                <i class="fas ${icone} ${corIcone} text-xs"></i>
-            </div>
-            <div class="flex-1 min-w-0">
-                <div class="flex justify-between items-start">
-                    <p class="text-xs font-bold text-gray-800 truncate" title="${log.usuario}">${nomeExibicao}</p>
-                    <span class="text-[10px] font-mono text-gray-400 whitespace-nowrap ml-2" title="${dataObj.toLocaleString()}">
-                        <i class="far fa-calendar-alt mr-1"></i>${dataFormatada}
-                    </span>
-                </div>
-                <p class="text-[10px] font-bold uppercase text-blue-600 mt-0.5 tracking-wide">${acaoLegivel}</p>
-                <p class="text-xs text-gray-500 leading-tight mt-1 break-words">${log.detalhe || ''}</p>
-            </div>
-        </div>
-    `;
-
-    // Insere no topo da lista (afterbegin)
-    container.insertAdjacentHTML('afterbegin', html);
-
-    // Mantém a lista limpa (máximo 50 itens na tela)
-    if (container.children.length > 50) {
-        container.lastElementChild.remove();
-    }
-}
-
-// Estilo de animação (caso não tenha no CSS global)
-if (!document.getElementById('style-logs-anim')) {
-    const styleLogs = document.createElement('style');
-    styleLogs.id = 'style-logs-anim';
-    styleLogs.innerHTML = `
-    @keyframes fadeInDown {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-    .animate-fade-in-down {
-        animation: fadeInDown 0.5s ease-out forwards;
-    }
-    `;
-    document.head.appendChild(styleLogs);
-}
+// Estilos extras para scrollbar fina nos cards
+const style = document.createElement('style');
+style.innerHTML = `
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 2px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #cbd5e1; }
+`;
+document.head.appendChild(style);
