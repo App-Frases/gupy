@@ -3,9 +3,8 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let usuarioLogado = null, abaAtiva = 'biblioteca', chatAberto = false, debounceTimer;
-let cacheNomesChat = {}; // Mapa para guardar os nomes dos usuários
+let cacheNomesChat = {}; 
 
-// --- INICIALIZAÇÃO ---
 window.onload = function() { 
     try {
         const s = localStorage.getItem('gupy_session'); 
@@ -22,13 +21,12 @@ window.onload = function() {
             document.getElementById('login-flow').classList.remove('hidden'); 
         }
     } catch (error) {
-        console.error("Erro crítico na inicialização:", error);
+        console.error("Erro inicialização:", error);
         localStorage.removeItem('gupy_session');
         document.getElementById('login-flow').classList.remove('hidden');
     }
 };
 
-// --- AUTH & LOGIN ---
 async function fazerLogin() {
     const u = document.getElementById('login-user').value; const p = document.getElementById('login-pass').value;
     try { 
@@ -36,7 +34,7 @@ async function fazerLogin() {
         if (error) return Swal.fire('Erro', error.message, 'error');
         if (data && data.length) { 
             const usuario = data[0];
-            if (usuario.ativo === false) return Swal.fire('Acesso Bloqueado', 'Esta conta foi inativada pela administração.', 'error');
+            if (usuario.ativo === false) return Swal.fire('Bloqueado', 'Conta inativada.', 'error');
 
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
@@ -74,13 +72,13 @@ function entrarNoSistema() {
             if(adminMenu) { adminMenu.classList.add('hidden'); adminMenu.classList.remove('flex'); }
         }
 
-        carregarNomesChat(); // Carrega os nomes para o chat
+        carregarNomesChat();
         navegar('biblioteca'); 
         registrarLog('LOGIN', 'Acesso realizado'); 
         iniciarHeartbeat(); 
         iniciarChat();
     } catch (error) {
-        console.error("Erro em entrarNoSistema:", error);
+        console.error("Erro entrarNoSistema:", error);
         navegar('biblioteca');
     }
 }
@@ -94,82 +92,62 @@ async function atualizarSenhaPrimeiroAcesso() {
 
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
 
-// --- LOGS: SALVA NO PADRÃO UNIVERSAL (UTC) ---
 async function registrarLog(acao, detalhe) { 
     if(usuarioLogado) {
         await _supabase.from('logs').insert([{
             usuario: usuarioLogado.username, 
             acao, 
             detalhe,
-            data_hora: new Date().toISOString() // Salva o momento exato em UTC
+            data_hora: new Date().toISOString()
         }]); 
     }
 }
 
-// --- NAVEGAÇÃO ---
 function navegar(pagina) {
-    try {
-        if (usuarioLogado.perfil !== 'admin' && (pagina === 'logs' || pagina === 'equipe' || pagina === 'dashboard')) pagina = 'biblioteca';
-        abaAtiva = pagina;
-        
-        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); 
-        const targetView = document.getElementById(`view-${pagina}`);
-        if(targetView) targetView.classList.remove('hidden');
-        
-        const filterBar = document.getElementById('filter-bar');
-        if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
-        
-        const btnAddFrase = document.getElementById('btn-add-global');
-        const btnAddMember = document.getElementById('btn-add-member');
-        const btnRefresh = document.getElementById('btn-refresh-logs');
-        const cntLib = document.getElementById('contador-resultados');
-        const cntTeam = document.getElementById('contador-equipe');
+    if (usuarioLogado.perfil !== 'admin' && (pagina === 'logs' || pagina === 'equipe' || pagina === 'dashboard')) pagina = 'biblioteca';
+    abaAtiva = pagina;
+    
+    document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); 
+    const targetView = document.getElementById(`view-${pagina}`);
+    if(targetView) targetView.classList.remove('hidden');
+    
+    const filterBar = document.getElementById('filter-bar');
+    if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
+    
+    const btns = ['btn-add-global', 'btn-add-member', 'btn-refresh-logs'];
+    btns.forEach(b => document.getElementById(b)?.classList.add('hidden'));
+    
+    if (pagina === 'biblioteca') {
+        document.getElementById('btn-add-global')?.classList.remove('hidden', 'flex');
+        carregarFrases();
+    } else if (pagina === 'equipe') {
+        document.getElementById('btn-add-member')?.classList.remove('hidden', 'flex');
+        carregarEquipe();
+    } else if (pagina === 'logs') {
+        document.getElementById('btn-refresh-logs')?.classList.remove('hidden', 'flex');
+        carregarLogs();
+    } else if (pagina === 'dashboard') {
+        carregarDashboard();
+    }
 
-        if(btnAddFrase) btnAddFrase.classList.add('hidden');
-        if(btnAddMember) btnAddMember.classList.add('hidden');
-        if(btnRefresh) btnRefresh.classList.add('hidden');
-        if(cntLib) cntLib.classList.add('hidden');
-        if(cntTeam) cntTeam.classList.add('hidden');
-        
-        if (pagina === 'biblioteca') {
-            if(btnAddFrase) { btnAddFrase.classList.remove('hidden'); btnAddFrase.classList.add('flex'); }
-            if(cntLib) { cntLib.classList.remove('hidden'); }
-            carregarFrases();
-        } 
-        else if (pagina === 'equipe') {
-            if(btnAddMember) { btnAddMember.classList.remove('hidden'); btnAddMember.classList.add('flex'); }
-            if(cntTeam) { cntTeam.classList.remove('hidden'); }
-            carregarEquipe();
-        } 
-        else if (pagina === 'logs') {
-            if(btnRefresh) { btnRefresh.classList.remove('hidden'); btnRefresh.classList.add('flex'); }
-            carregarLogs();
-        } 
-        else if (pagina === 'dashboard') {
-            carregarDashboard();
-        }
-
-        const inputBusca = document.getElementById('global-search');
-        inputBusca.value = '';
-        inputBusca.disabled = (pagina === 'dashboard');
-
-    } catch (e) { console.error("Erro na navegação", e); }
+    const inputBusca = document.getElementById('global-search');
+    if(inputBusca) { inputBusca.value = ''; inputBusca.disabled = (pagina === 'dashboard'); }
 }
 
 function debounceBusca() { 
     clearTimeout(debounceTimer); 
     debounceTimer = setTimeout(() => {
         const termo = document.getElementById('global-search').value.toLowerCase();
-        if (abaAtiva === 'biblioteca' && typeof aplicarFiltros === 'function') aplicarFiltros();
-        if (abaAtiva === 'equipe' && typeof filtrarEquipe === 'function') filtrarEquipe(termo);
-        if (abaAtiva === 'logs' && typeof filtrarLogs === 'function') filtrarLogs(termo);
+        if (abaAtiva === 'biblioteca') aplicarFiltros();
+        if (abaAtiva === 'equipe') filtrarEquipe(termo);
+        if (abaAtiva === 'logs') filtrarLogs(termo);
     }, 300); 
 }
 
-// --- UTILITÁRIOS ---
 function normalizar(t) { return t ? t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : ""; }
-function formatarTextoBonito(t, tipo) { if (!t) return ""; let l = t.trim().replace(/\s+/g, ' '); if (tipo === 'titulo') return l.toLowerCase().replace(/(?:^|\s)\S/g, a => a.toUpperCase()); if (tipo === 'frase') return l.charAt(0).toUpperCase() + l.slice(1); return l; }
+function formatarTextoBonito(t, tipo) { if (!t) return ""; let l = t.trim().replace(/\s+/g, ' '); if (tipo === 'titulo') return l.toLowerCase().replace(/(?:^|\s)\S/g, a => a.toUpperCase()); return l.charAt(0).toUpperCase() + l.slice(1); }
 
+// UTILS HEADER
 function calcularIdadeHeader() {
     const val = document.getElementById('quick-idade').value;
     if(val.length === 10) { document.getElementById('nasc-input').value = val; calcularIdade(); document.getElementById('quick-idade').value = ''; document.getElementById('modal-idade').classList.remove('hidden'); }
@@ -180,7 +158,7 @@ function buscarCEPHeader() {
 }
 async function buscarCEP() {
     const cep = document.getElementById('cep-input').value.replace(/\D/g, ''); const resArea = document.getElementById('cep-resultado'); const loading = document.getElementById('cep-loading');
-    if(cep.length !== 8) return Swal.fire('Erro', 'CEP deve ter 8 dígitos', 'warning');
+    if(cep.length !== 8) return Swal.fire('Erro', 'CEP inválido', 'warning');
     resArea.classList.add('hidden'); loading.classList.remove('hidden');
     try { const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); const data = await res.json(); loading.classList.add('hidden');
         if(data.erro) { Swal.fire('Erro', 'CEP não encontrado', 'error'); return; }
@@ -190,144 +168,74 @@ async function buscarCEP() {
     } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na busca', 'error'); }
 }
 
-// --- FUNÇÃO CALCULADORA DE DATAS (ANOS, MESES, SEMANAS, DIAS + TOTAL DIAS) ---
 function calcularIdade() {
     const val = document.getElementById('nasc-input').value; 
     const parts = val.split('/'); 
-    
     if(parts.length !== 3) return Swal.fire('Erro', 'Data inválida', 'warning');
+    const dNasc = new Date(parts[2], parts[1]-1, parts[0]);
+    const hoje = new Date(); dNasc.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
     
-    const diaNasc = parseInt(parts[0]); 
-    const mesNasc = parseInt(parts[1]); 
-    const anoNasc = parseInt(parts[2]);
-    
-    if(diaNasc < 1 || diaNasc > 31 || mesNasc < 1 || mesNasc > 12 || anoNasc < 1900) {
-        return Swal.fire('Erro', 'Data inválida', 'error');
-    }
+    if (dNasc > hoje) return Swal.fire('Erro', 'Data futura', 'warning');
 
-    const dataInput = new Date(anoNasc, mesNasc - 1, diaNasc);
-    const hoje = new Date();
-    
-    // Zera as horas para cálculo preciso
-    dataInput.setHours(0,0,0,0);
-    hoje.setHours(0,0,0,0);
-    
-    if (dataInput > hoje) return Swal.fire('Erro', 'Data futura não permitida', 'warning');
+    const totalDias = Math.ceil(Math.abs(hoje - dNasc) / (1000 * 60 * 60 * 24));
+    let anos = hoje.getFullYear() - dNasc.getFullYear();
+    let meses = hoje.getMonth() - dNasc.getMonth();
+    let dias = hoje.getDate() - dNasc.getDate();
 
-    // 1. Cálculo de Dias Totais
-    const diffTime = Math.abs(hoje - dataInput);
-    const totalDias = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (dias < 0) { meses--; dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate(); }
+    if (meses < 0) { anos--; meses += 12; }
 
-    // 2. Cálculos Detalhados
-    let anos = hoje.getFullYear() - dataInput.getFullYear();
-    let meses = hoje.getMonth() - dataInput.getMonth();
-    let dias = hoje.getDate() - dataInput.getDate();
-
-    if (dias < 0) {
-        meses--;
-        const ultimoDiaMesAnterior = new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
-        dias += ultimoDiaMesAnterior;
-    }
-
-    if (meses < 0) {
-        anos--;
-        meses += 12;
-    }
-
-    const semanas = Math.floor(dias / 7);
-    const diasFinais = dias % 7;
-
-    // Atualiza a interface
     document.getElementById('data-nasc-display').innerText = val;
-    
-    const elTotal = document.getElementById('res-total-dias');
-    if(elTotal) elTotal.innerText = totalDias.toLocaleString('pt-BR'); 
-
+    document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR'); 
     document.getElementById('res-anos').innerText = anos;
     document.getElementById('res-meses').innerText = meses;
-    document.getElementById('res-semanas').innerText = semanas;
-    document.getElementById('res-dias').innerText = diasFinais;
-
-    // Exibe o resultado
+    document.getElementById('res-semanas').innerText = Math.floor(dias / 7);
+    document.getElementById('res-dias').innerText = dias % 7;
     document.getElementById('idade-resultado-box').classList.remove('hidden');
 }
 
 function mascaraData(i) { let v = i.value.replace(/\D/g, ""); if(v.length>2) v=v.substring(0,2)+"/"+v.substring(2); if(v.length>5) v=v.substring(0,5)+"/"+v.substring(5,9); i.value = v; }
 function fecharModalCEP() { document.getElementById('modal-cep').classList.add('hidden'); }
 function fecharModalIdade() { document.getElementById('modal-idade').classList.add('hidden'); }
+function fecharModalUsuario() { document.getElementById('modal-usuario').classList.add('hidden'); }
 
-// --- CHAT COM NOTIFICAÇÃO E NOMES ---
+// CHAT
 async function carregarNomesChat() {
     const { data } = await _supabase.from('usuarios').select('username, nome');
-    if(data) {
-        data.forEach(u => cacheNomesChat[u.username] = u.nome || u.username);
-    }
+    if(data) data.forEach(u => cacheNomesChat[u.username] = u.nome || u.username);
 }
-
-function iniciarHeartbeat() { const beat = async () => { await _supabase.from('usuarios').update({ultimo_visto: new Date().toISOString()}).eq('id', usuarioLogado.id); updateOnline(); }; beat(); setInterval(beat, 10000); }
+function iniciarHeartbeat() { const beat = async () => { await _supabase.from('usuarios').update({ultimo_visto: new Date().toISOString()}).eq('id', usuarioLogado.id); updateOnline(); }; beat(); setInterval(beat, 15000); }
 async function updateOnline() { const {data} = await _supabase.from('usuarios').select('username').gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); if(data){ document.getElementById('online-count').innerText = `${data.length} Online`; document.getElementById('online-users-list').innerText = data.map(u=>u.username).join(', '); document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); }}
 
 function toggleChat() { 
     const w = document.getElementById('chat-window'); 
     chatAberto = !chatAberto; 
-    
-    // Animações de abrir/fechar
-    w.className = chatAberto 
-        ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" 
-        : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; 
-    
+    w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; 
     if(chatAberto){ 
         document.getElementById('online-users-list').classList.remove('hidden'); 
         iniciarChat(); 
-
-        // Resetar alertas (badge e cor)
         const btn = document.getElementById('chat-toggle-btn');
-        const badge = document.getElementById('badge-unread');
-        
-        btn.classList.remove('bg-orange-500', 'hover:bg-orange-600', 'animate-bounce');
-        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-        
-        if(badge) {
-            badge.innerText = '0';
-            badge.classList.add('hidden');
-        }
+        btn.classList.remove('bg-orange-500', 'animate-bounce'); btn.classList.add('bg-blue-600');
+        document.getElementById('badge-unread').classList.add('hidden');
     } 
 }
 
 function iniciarChat() { 
-    // Carrega mensagens antigas (true indica que é histórico, não deve gerar alerta)
     _supabase.from('chat_mensagens').select('*').order('created_at',{ascending:true}).limit(50).then(({data})=>{if(data)data.forEach(m => addMsg(m, true))}); 
-    // Escuta novas mensagens (false indica mensagem nova em tempo real)
     _supabase.channel('chat').on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensagens'},p=>addMsg(p.new, false)).subscribe(); 
 }
 
 async function enviarMensagem() { const i = document.getElementById('chat-input'); if(i.value.trim()){ await _supabase.from('chat_mensagens').insert([{usuario:usuarioLogado.username, mensagem:i.value.trim(), perfil:usuarioLogado.perfil}]); i.value=''; } }
 
-function addMsg(msg, isHistory = false) { 
+function addMsg(msg, isHistory) { 
     const c = document.getElementById('chat-messages'); 
     const me = msg.usuario === usuarioLogado.username; 
-    
-    // Resolve o nome: usa o cache ou o próprio ID se não encontrar
     const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario;
-
     c.innerHTML += `<div class="flex flex-col ${me?'items-end':'items-start'} mb-2"><span class="text-[9px] text-gray-400 font-bold ml-1">${me?'':nomeMostrar}</span><div class="px-3 py-2 rounded-xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm">${msg.mensagem}</div></div>`; 
     c.scrollTop = c.scrollHeight; 
-
-    // LÓGICA DE ALERTA VISUAL
-    // Só alerta se: NÃO for histórico, o chat estiver fechado E a mensagem não for minha
     if (!isHistory && !chatAberto && !me) {
         const btn = document.getElementById('chat-toggle-btn');
-        const badge = document.getElementById('badge-unread');
-
-        if(btn) {
-            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
-            btn.classList.add('bg-orange-500', 'hover:bg-orange-600', 'animate-bounce'); // Muda cor e pula
-        }
-        
-        if(badge) {
-            const atual = parseInt(badge.innerText || '0');
-            badge.innerText = atual + 1;
-            badge.classList.remove('hidden');
-        }
+        btn.classList.remove('bg-blue-600'); btn.classList.add('bg-orange-500', 'animate-bounce');
+        document.getElementById('badge-unread').classList.remove('hidden');
     }
 }
