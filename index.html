@@ -100,18 +100,30 @@
     <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden modal-content relative">
             <div class="bg-purple-600 px-8 py-5 border-b border-purple-500 flex justify-between items-center text-white">
-                <h3 class="text-xl font-extrabold flex items-center gap-2"><i class="fas fa-birthday-cake"></i> Idade Calculada</h3>
-                <button onclick="fecharModalIdade()" class="text-purple-200 hover:text-white transition text-xl"><i class="fas fa-times"></i></button>
+                <h3 class="text-xl font-extrabold flex items-center gap-2">
+                    <i class="fas fa-calculator"></i> Calculadora de Datas
+                </h3>
+                <button onclick="fecharModalIdade()" class="text-purple-200 hover:text-white transition text-xl">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
+            
             <div class="p-8">
                 <div class="hidden"><input id="nasc-input"></div>
+                
                 <div class="text-center mb-6 bg-purple-50 p-3 rounded-xl border border-purple-100">
-                    <p class="text-xs font-bold text-purple-400 uppercase tracking-widest">Nascimento Informado</p>
+                    <p class="text-xs font-bold text-purple-400 uppercase tracking-widest">Data Informada</p>
                     <p id="data-nasc-display" class="text-lg font-extrabold text-purple-700 mt-1">--/--/----</p>
                 </div>
                 
                 <div id="idade-resultado-box" class="hidden text-center bg-white p-6 rounded-2xl border-2 border-purple-100 shadow-sm mt-4">
-                    <p class="text-xs text-gray-400 font-bold uppercase mb-4 tracking-widest">Idade Detalhada</p>
+                    
+                    <div class="mb-6 bg-purple-600 text-white p-4 rounded-xl shadow-lg shadow-purple-200 transform transition hover:scale-105">
+                         <span id="res-total-dias" class="block text-4xl font-extrabold">0</span>
+                         <span class="text-[10px] font-bold uppercase tracking-widest opacity-90">Dias Totais Corridos</span>
+                    </div>
+
+                    <p class="text-xs text-gray-400 font-bold uppercase mb-4 tracking-widest">Detalhamento Temporal</p>
                     
                     <div class="grid grid-cols-2 gap-4">
                         <div class="bg-purple-50 p-3 rounded-xl">
@@ -258,8 +270,8 @@
                 </div>
                 <div class="flex gap-3 shrink-0 flex-wrap sm:flex-nowrap">
                     <div class="relative group flex-1 sm:flex-none sm:w-40">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400"><i class="fas fa-birthday-cake"></i></div>
-                        <input type="text" id="quick-idade" placeholder="DD/MM/AAAA" maxlength="10" class="quick-input w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-purple-50/50 border-purple-100 focus:ring-purple-200 placeholder-purple-300" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularIdadeHeader()">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400"><i class="fas fa-calculator"></i></div>
+                        <input type="text" id="quick-idade" placeholder="Data (DD/MM/AAAA)" maxlength="10" class="quick-input w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-purple-50/50 border-purple-100 focus:ring-purple-200 placeholder-purple-300" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularIdadeHeader()">
                     </div>
                     <div class="relative group flex-1 sm:flex-none sm:w-40">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-blue-400"><i class="fas fa-map-marker-alt"></i></div>
@@ -306,20 +318,8 @@
                 </section>
 
                 <section id="view-logs" class="view-section hidden flex-grow space-y-6">
-                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full pb-10">
-                        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                            <div class="bg-green-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center"><h3 class="font-extrabold text-green-700 text-sm flex items-center gap-2"><i class="fas fa-shield-alt"></i> Acessos & Segurança</h3><span class="text-[10px] font-bold bg-white text-green-600 px-2 py-1 rounded border border-green-100 shadow-sm">Últimos 10</span></div>
-                            <div id="col-acessos" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]"><p class="text-center text-gray-300 text-xs py-10">Carregando...</p></div>
+                    <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10">
                         </div>
-                        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                            <div class="bg-blue-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center"><h3 class="font-extrabold text-blue-700 text-sm flex items-center gap-2"><i class="fas fa-rocket"></i> Produtividade (Uso)</h3><span class="text-[10px] font-bold bg-white text-blue-600 px-2 py-1 rounded border border-blue-100 shadow-sm">Últimos 10</span></div>
-                            <div id="col-uso" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]"><p class="text-center text-gray-300 text-xs py-10">Carregando...</p></div>
-                        </div>
-                        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden flex flex-col h-full">
-                            <div class="bg-orange-50/50 px-5 py-4 border-b border-gray-100 flex justify-between items-center"><h3 class="font-extrabold text-orange-700 text-sm flex items-center gap-2"><i class="fas fa-tools"></i> Auditoria & Gestão</h3><span class="text-[10px] font-bold bg-white text-orange-600 px-2 py-1 rounded border border-orange-100 shadow-sm">Últimos 10</span></div>
-                            <div id="col-auditoria" class="flex-1 overflow-y-auto p-4 space-y-3 max-h-[500px]"><p class="text-center text-gray-300 text-xs py-10">Carregando...</p></div>
-                        </div>
-                    </div>
                 </section>
 
                 <section id="view-equipe" class="view-section hidden flex-grow">
