@@ -1,300 +1,319 @@
 // Local: js/dashboard.js
 
-// Variáveis Globais de Gráficos (para destruir e recriar corretamente)
-let chartTimeline = null;
-let chartMotivos = null;
 let dashboardSubscription = null;
 let debounceDashboard = null;
 
-// --- INICIALIZAÇÃO E CARREGAMENTO ---
-
 async function carregarDashboard() {
     try {
-        // Data de corte: 30 dias para gráficos, 90 para estatísticas gerais
-        const date30d = new Date(); date30d.setDate(date30d.getDate() - 30);
-        const date90d = new Date(); date90d.setDate(date90d.getDate() - 90);
+        const loadingHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs animate-pulse">Carregando dados...</td></tr>';
+        document.getElementById('lista-top-frases').innerHTML = loadingHTML;
+        document.getElementById('lista-frases-sem-uso').innerHTML = loadingHTML;
         
-        // 1. Buscando Dados (Filtrados por data para performance)
-        const { data: logs, error: errLogs } = await _supabase
-            .from('logs')
-            .select('*')
-            .gte('data_hora', date90d.toISOString())
-            .order('data_hora', { ascending: true }); // Importante para timeline
-            
-        const { data: users, error: errUsers } = await _supabase.from('usuarios').select('username, nome, ultimo_visto');
-        const { data: phrases, error: errPhrases } = await _supabase.from('frases').select('id, empresa, motivo');
-        
-        if (errLogs || errUsers || errPhrases) throw new Error("Erro ao buscar dados");
+        // Data de corte: 90 dias
+        const date90d = new Date();
+        date90d.setDate(date90d.getDate() - 90);
 
-        // 2. Processamento dos Dados
-        const processado = processarDadosDashboard(logs, users, phrases, date30d);
-        
-        // 3. Atualização da Interface
-        atualizarKPIs(processado);
-        renderizarGraficos(processado);
-        renderizarTabelas(processado);
-        
-        // 4. Iniciar Realtime (se ainda não iniciado)
+        // 1. Busca Dados
+        // Frases (todas)
+        const { data: todasFrases, error: errF } = await _supabase.from('frases').select('*');
+        // Usuários (todos)
+        const { data: todosUsuarios, error: errU } = await _supabase.from('usuarios').select('username, nome');
+        // Logs (apenas 'COPIAR' dos últimos 90 dias para contagem de uso)
+        const { data: logsUso, error: errL } = await _supabase
+            .from('logs')
+            .select('usuario, detalhe, data_hora')
+            .eq('acao', 'COPIAR')
+            .gte('data_hora', date90d.toISOString());
+
+        if (errF || errU || errL) throw new Error("Erro ao buscar dados do dashboard");
+
+        // 2. Processamento
+        const stats = processarEstatisticas(todasFrases, todosUsuarios, logsUso);
+
+        // 3. Renderização
+        renderizarKPIs(stats);
+        renderizarTopFrases(stats.topFrases);
+        renderizarRankingsUsuarios(stats.rankingUsuarios);
+        renderizarFrasesSemUso(stats.frasesSemUso);
+
+        // 4. Realtime (para atualizar se alguém copiar algo agora)
         iniciarDashboardRealtime();
 
     } catch (e) {
-        console.error("Dashboard Error:", e);
+        console.error("Erro Dashboard:", e);
+        Swal.fire('Erro', 'Não foi possível carregar o dashboard.', 'error');
     }
 }
 
-// --- LÓGICA DE PROCESSAMENTO DE DADOS ---
-
-function processarDadosDashboard(logs, users, phrases, date30d) {
-    // Mapas auxiliares
-    const phraseMap = {}; 
-    phrases.forEach(p => phraseMap[p.id] = p);
-    
+function processarEstatisticas(frases, usuarios, logs) {
+    // Mapa de Usuários (username -> nome bonito)
     const userMap = {};
-    users.forEach(u => userMap[u.username] = u.nome || u.username);
+    usuarios.forEach(u => userMap[u.username] = u.nome || formatarNome(u.username));
 
-    // Estruturas de resultado
-    let totalUsos30d = 0;
-    let usersAtivosSet = new Set();
-    const timelineData = {}; // "YYYY-MM-DD" -> count
-    const motivosCount = {}; // "Feedback" -> count
-    const userRanking = {}; // "username" -> count
-    const phraseRanking = {}; // "id" -> count
+    // Contadores
+    const usoPorFrase = {}; // ID -> Qtd
+    const usoPorUsuario = {}; // Username -> Qtd
 
-    // Inicializa timeline com 0 para os últimos 30 dias (para o gráfico não ficar buraco)
-    for (let i = 0; i < 30; i++) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        timelineData[d.toISOString().split('T')[0]] = 0;
-    }
+    // Inicializa todos os usuários com 0 para aparecerem no "Menos Usam"
+    usuarios.forEach(u => usoPorUsuario[u.username] = 0);
 
+    // Processa Logs
     logs.forEach(log => {
-        const logDate = new Date(log.data_hora);
-        const dateStr = log.data_hora.split('T')[0];
-        const isRecent30 = logDate >= date30d;
+        // Contagem Frases
+        const idFrase = String(log.detalhe).replace(/\D/g, ''); // Limpa ID
+        if (idFrase) usoPorFrase[idFrase] = (usoPorFrase[idFrase] || 0) + 1;
 
-        // Só considera logs de cópia para estatísticas de USO
-        if (log.acao === 'COPIAR') {
-            const phraseId = String(log.detalhe).replace(/\D/g, ''); // Garante ID limpo
-            
-            // --- Estatísticas de 30 Dias ---
-            if (isRecent30) {
-                totalUsos30d++;
-                usersAtivosSet.add(log.usuario);
-                
-                // Timeline
-                if (timelineData[dateStr] !== undefined) timelineData[dateStr]++;
-
-                // Motivos (Gráfico Rosca)
-                if (phraseId && phraseMap[phraseId]) {
-                    const motivo = phraseMap[phraseId].motivo || 'Outros';
-                    motivosCount[motivo] = (motivosCount[motivo] || 0) + 1;
-                }
-            }
-
-            // --- Rankings (Base 90 dias - logs totais trazidos) ---
-            // Ranking Usuários
-            userRanking[log.usuario] = (userRanking[log.usuario] || 0) + 1;
-            
-            // Ranking Frases
-            if (phraseId) {
-                phraseRanking[phraseId] = (phraseRanking[phraseId] || 0) + 1;
-            }
+        // Contagem Usuários (se o usuário ainda existir no banco)
+        if (usoPorUsuario.hasOwnProperty(log.usuario)) {
+            usoPorUsuario[log.usuario]++;
         }
     });
 
+    // --- A. Top 10 Frases ---
+    // Mapeia frases com seus contadores
+    const frasesComUso = frases.map(f => ({
+        ...f,
+        usos: usoPorFrase[f.id] || 0
+    }));
+    // Ordena decrescente
+    frasesComUso.sort((a, b) => b.usos - a.usos);
+    const top10 = frasesComUso.slice(0, 10);
+
+    // --- B. Frases Sem Uso (90d) ---
+    const semUso = frasesComUso.filter(f => f.usos === 0);
+
+    // --- C. Ranking Usuários ---
+    const arrayUsuarios = Object.entries(usoPorUsuario).map(([user, qtd]) => ({
+        username: user,
+        nome: userMap[user],
+        qtd: qtd
+    }));
+    
+    // Mais ativos (decrescente)
+    arrayUsuarios.sort((a, b) => b.qtd - a.qtd);
+    const top5Mais = arrayUsuarios.slice(0, 5);
+
+    // Menos ativos (crescente) - Inverte a lógica, quem tem 0 vem primeiro
+    const top5Menos = [...arrayUsuarios].sort((a, b) => a.qtd - b.qtd).slice(0, 5);
+
     return {
-        kpis: {
-            totalUsos: totalUsos30d,
-            activeUsers: usersAtivosSet.size,
-            dailyAvg: (totalUsos30d / 30).toFixed(1)
-        },
-        charts: {
-            timeline: timelineData,
-            motivos: motivosCount
-        },
-        rankings: {
-            users: userRanking,
-            phrases: phraseRanking
-        },
-        meta: {
-            userMap,
-            phraseMap
-        }
+        topFrases: top10,
+        frasesSemUso: semUso,
+        rankingUsuarios: { mais: top5Mais, menos: top5Menos },
+        totalUsos: logs.length,
+        totalFrases: frases.length
     };
 }
 
-// --- RENDERIZAÇÃO VISUAL ---
+// --- RENDERIZADORES ---
 
-function atualizarKPIs(data) {
-    // Efeito de contagem
-    animateValue('dash-total-usos', 0, data.kpis.totalUsos, 800);
-    animateValue('dash-active-users', 0, data.kpis.activeUsers, 800);
-    animateValue('dash-daily-avg', 0, parseFloat(data.kpis.dailyAvg), 800);
-
-    // Top Frase ID
-    const topPhraseId = Object.entries(data.rankings.phrases).sort((a,b) => b[1] - a[1])[0];
-    const elTop = document.getElementById('dash-top-phrase-id');
-    if (topPhraseId && data.meta.phraseMap[topPhraseId[0]]) {
-        elTop.innerText = data.meta.phraseMap[topPhraseId[0]].empresa;
-    } else {
-        elTop.innerText = "-";
-    }
+function renderizarKPIs(stats) {
+    document.getElementById('kpi-total-usos').innerText = stats.totalUsos;
+    document.getElementById('kpi-frases-ativas').innerText = stats.totalFrases;
+    document.getElementById('contador-sem-uso').innerText = `${stats.frasesSemUso.length} frases`;
 }
 
-function renderizarGraficos(data) {
-    // 1. Gráfico de Linha (Timeline)
-    const ctxTimeline = document.getElementById('chart-timeline');
-    if (ctxTimeline) {
-        // Ordena datas
-        const sortedDates = Object.keys(data.charts.timeline).sort();
-        const values = sortedDates.map(d => data.charts.timeline[d]);
-        // Formata datas para ficar bonito (ex: 15/12)
-        const labels = sortedDates.map(d => d.split('-').slice(1).reverse().join('/'));
-
-        if (chartTimeline) chartTimeline.destroy();
-
-        chartTimeline = new Chart(ctxTimeline, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Frases Copiadas',
-                    data: values,
-                    borderColor: '#3b82f6', // blue-500
-                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                    borderWidth: 2,
-                    tension: 0.3, // Curva suave
-                    fill: true,
-                    pointRadius: 2,
-                    pointHoverRadius: 5
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { mode: 'index', intersect: false } },
-                scales: { 
-                    y: { beginAtZero: true, grid: { borderDash: [2, 4] } },
-                    x: { grid: { display: false } }
-                }
-            }
-        });
+function renderizarTopFrases(lista) {
+    const tbody = document.getElementById('lista-top-frases');
+    if (lista.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-slate-400 text-xs">Nenhuma frase usada no período.</td></tr>';
+        return;
     }
 
-    // 2. Gráfico de Rosca (Motivos)
-    const ctxMotivos = document.getElementById('chart-motivos');
-    if (ctxMotivos) {
-        // Pega Top 5 motivos e agrupa o resto em "Outros"
-        const entries = Object.entries(data.charts.motivos).sort((a,b) => b[1] - a[1]);
-        const top5 = entries.slice(0, 5);
-        const others = entries.slice(5).reduce((acc, curr) => acc + curr[1], 0);
-        
-        if (others > 0) top5.push(['Outros', others]);
-
-        const labels = top5.map(x => x[0]);
-        const values = top5.map(x => x[1]);
-        const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#94a3b8'];
-
-        if (chartMotivos) chartMotivos.destroy();
-
-        chartMotivos = new Chart(ctxMotivos, {
-            type: 'doughnut',
-            data: {
-                labels: labels,
-                datasets: [{
-                    data: values,
-                    backgroundColor: colors,
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { 
-                    legend: { position: 'right', labels: { boxWidth: 10, font: { size: 10 } } } 
-                },
-                cutout: '65%'
-            }
-        });
-    }
+    tbody.innerHTML = lista.map((f, i) => `
+        <tr class="hover:bg-blue-50/50 transition">
+            <td class="px-5 py-3">
+                <span class="font-black text-slate-300 text-lg italic">#${i + 1}</span>
+            </td>
+            <td class="px-5 py-3">
+                <div class="font-bold text-slate-700">${f.empresa || 'Geral'}</div>
+                <div class="text-[10px] text-slate-400 font-bold uppercase">${f.motivo || '-'}</div>
+            </td>
+            <td class="px-5 py-3">
+                <div class="text-xs text-slate-500 truncate max-w-[200px]" title="${f.conteudo}">${f.conteudo}</div>
+            </td>
+            <td class="px-5 py-3 text-right">
+                <span class="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-bold">${f.usos}</span>
+            </td>
+        </tr>
+    `).join('');
 }
 
-function renderizarTabelas(data) {
-    // 1. Top Colaboradores
-    const elUsers = document.getElementById('table-top-users');
-    const sortedUsers = Object.entries(data.rankings.users).sort((a,b) => b[1] - a[1]).slice(0, 10);
-    
-    elUsers.innerHTML = sortedUsers.map(([user, count], idx) => {
-        const name = data.meta.userMap[user] || user;
-        const medal = idx === 0 ? '🥇' : (idx === 1 ? '🥈' : (idx === 2 ? '🥉' : `<span class="text-slate-400 font-bold text-xs">#${idx+1}</span>`));
-        return `
-            <tr class="hover:bg-slate-50 transition border-b border-slate-50 last:border-0">
-                <td class="px-6 py-3 whitespace-nowrap">
+function renderizarRankingsUsuarios(rankings) {
+    // Renderiza Mais Ativos
+    const elMais = document.getElementById('lista-top-users');
+    elMais.innerHTML = rankings.mais.map((u, i) => `
+        <tr class="border-b border-slate-50 last:border-0 hover:bg-green-50/30">
+            <td class="px-5 py-3">
+                <div class="flex justify-between items-center">
                     <div class="flex items-center gap-3">
-                        <div class="w-6 text-center">${medal}</div>
-                        <div class="font-bold text-slate-700 text-xs">${name}</div>
+                        <div class="w-6 font-bold text-slate-300 text-xs">#${i + 1}</div>
+                        <div>
+                            <p class="font-bold text-slate-700 text-xs">${u.nome}</p>
+                            <p class="text-[10px] text-slate-400">@${u.username}</p>
+                        </div>
                     </div>
-                </td>
-                <td class="px-6 py-3 text-right">
-                    <span class="bg-blue-100 text-blue-700 py-1 px-2 rounded text-xs font-bold">${count}</span>
-                </td>
-            </tr>
-        `;
-    }).join('') || '<tr><td colspan="2" class="p-4 text-center text-xs text-slate-400">Sem dados.</td></tr>';
+                    <span class="font-bold text-green-600 text-xs bg-green-100 px-2 py-0.5 rounded-full">${u.qtd} usos</span>
+                </div>
+            </td>
+        </tr>
+    `).join('');
 
-    // 2. Top Frases
-    const elPhrases = document.getElementById('table-top-phrases');
-    const sortedPhrases = Object.entries(data.rankings.phrases).sort((a,b) => b[1] - a[1]).slice(0, 10);
+    // Renderiza Menos Ativos
+    const elMenos = document.getElementById('lista-bottom-users');
+    elMenos.innerHTML = rankings.menos.map((u, i) => `
+        <tr class="border-b border-slate-50 last:border-0 hover:bg-red-50/30">
+            <td class="px-5 py-3">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-6 font-bold text-slate-300 text-xs">#${i + 1}</div>
+                        <div>
+                            <p class="font-bold text-slate-700 text-xs">${u.nome}</p>
+                            <p class="text-[10px] text-slate-400">@${u.username}</p>
+                        </div>
+                    </div>
+                    <span class="font-bold text-red-500 text-xs bg-red-50 px-2 py-0.5 rounded-full">${u.qtd} usos</span>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
 
-    elPhrases.innerHTML = sortedPhrases.map(([id, count], idx) => {
-        const phrase = data.meta.phraseMap[id];
-        if (!phrase) return '';
-        // Calcula % para barra de progresso (baseado no maior valor)
-        const maxVal = sortedPhrases[0][1];
-        const pct = (count / maxVal) * 100;
-        
+function renderizarFrasesSemUso(lista) {
+    const tbody = document.getElementById('lista-frases-sem-uso');
+    if (lista.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="p-4 text-center text-green-500 font-bold text-xs"><i class="fas fa-check-circle mr-1"></i> Ótimo! Todas as frases foram usadas recentemente.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = lista.map(f => {
+        // Prepara objeto seguro para passar na função editar
+        const fraseSafe = JSON.stringify(f).replace(/'/g, "&#39;");
+        const criador = f.revisado_por ? formatarNome(f.revisado_por) : 'Desconhecido';
+
         return `
-            <tr class="hover:bg-slate-50 transition border-b border-slate-50 last:border-0">
-                <td class="px-6 py-3">
-                    <div class="flex flex-col">
-                        <div class="flex justify-between items-end mb-1">
-                            <span class="font-bold text-slate-700 text-xs truncate max-w-[150px]">${phrase.empresa}</span>
-                            <span class="text-[10px] text-slate-400 font-bold">${count} usos</span>
-                        </div>
-                        <div class="w-full bg-slate-100 rounded-full h-1.5">
-                            <div class="bg-orange-400 h-1.5 rounded-full" style="width: ${pct}%"></div>
-                        </div>
-                        <div class="text-[9px] text-slate-400 mt-0.5 truncate">${phrase.motivo}</div>
+        <tr class="hover:bg-orange-50/30 transition group">
+            <td class="px-5 py-3 font-mono text-xs text-slate-400">#${f.id}</td>
+            <td class="px-5 py-3">
+                <div class="font-bold text-slate-700 text-xs">${f.motivo || 'Sem Motivo'}</div>
+                <div class="text-[10px] text-slate-400">${f.empresa}</div>
+            </td>
+            <td class="px-5 py-3">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-5 h-5 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-bold">
+                        ${criador.charAt(0)}
                     </div>
-                </td>
-            </tr>
-        `;
-    }).join('') || '<tr><td class="p-4 text-center text-xs text-slate-400">Sem dados.</td></tr>';
+                    <span class="text-xs text-slate-600 font-bold">${criador}</span>
+                </div>
+            </td>
+            <td class="px-5 py-3 text-right">
+                <button onclick='abrirModalEditarDashboard(${fraseSafe})' class="text-blue-500 hover:text-blue-700 bg-white border border-blue-100 hover:bg-blue-50 p-1.5 rounded-lg transition mr-1" title="Editar">
+                    <i class="fas fa-pen"></i>
+                </button>
+                <button onclick="deletarFraseDashboard(${f.id})" class="text-red-400 hover:text-red-600 bg-white border border-red-100 hover:bg-red-50 p-1.5 rounded-lg transition" title="Excluir">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </td>
+        </tr>
+    `}).join('');
+}
+
+// --- AÇÕES DO DASHBOARD (EDITAR / EXCLUIR) ---
+
+async function deletarFraseDashboard(id) {
+    const result = await Swal.fire({
+        title: 'Excluir frase?',
+        text: "Essa frase não é usada há mais de 90 dias.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Sim, excluir',
+        cancelButtonText: 'Cancelar'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            const { error } = await _supabase.from('frases').delete().eq('id', id);
+            if (error) throw error;
+            
+            registrarLog('EXCLUIR', `Painel: Apagou frase #${id}`);
+            Swal.fire('Excluído!', '', 'success');
+            
+            // Recarrega o dashboard
+            carregarDashboard();
+        } catch (e) {
+            Swal.fire('Erro', 'Falha ao excluir.', 'error');
+        }
+    }
+}
+
+// Abre o modal existente (do index.html) mas configura para salvar e atualizar o dashboard
+function abrirModalEditarDashboard(f) {
+    // Usa as funções globais do index.html/biblioteca.js para preencher o modal
+    document.getElementById('id-frase').value = f.id;
+    document.getElementById('inp-empresa').value = f.empresa;
+    document.getElementById('inp-motivo').value = f.motivo;
+    document.getElementById('inp-doc').value = f.documento;
+    document.getElementById('inp-conteudo').value = f.conteudo;
+    document.getElementById('modal-title').innerHTML = `Editar #${f.id}`;
+    
+    // TRUQUE: Sobrescreve temporariamente a função salvarFrase para recarregar o dashboard
+    const btnSalvar = document.querySelector('#modal-frase button[onclick="salvarFrase()"]');
+    
+    // Remove listeners antigos (clone)
+    const novoBtn = btnSalvar.cloneNode(true);
+    btnSalvar.parentNode.replaceChild(novoBtn, btnSalvar);
+    
+    novoBtn.onclick = async function() {
+        await salvarFraseLogica(); // Chama a lógica de salvar
+        carregarDashboard();      // Atualiza dashboard
+    };
+
+    document.getElementById('modal-frase').classList.remove('hidden');
+}
+
+// Reutiliza a lógica de salvar (copiada de biblioteca.js para garantir acesso aqui)
+async function salvarFraseLogica() {
+    const id = document.getElementById('id-frase').value; 
+    const rawConteudo = document.getElementById('inp-conteudo').value;
+    let conteudoLimpo = rawConteudo.trim();
+    if(conteudoLimpo) conteudoLimpo = conteudoLimpo.charAt(0).toUpperCase() + conteudoLimpo.slice(1);
+    
+    if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
+
+    const dados = { 
+        empresa: formatarTextoBonito(document.getElementById('inp-empresa').value, 'titulo'), 
+        motivo: formatarTextoBonito(document.getElementById('inp-motivo').value, 'titulo'), 
+        documento: formatarTextoBonito(document.getElementById('inp-doc').value, 'titulo'), 
+        conteudo: conteudoLimpo, 
+        revisado_por: usuarioLogado.username 
+    }; 
+    
+    try { 
+        await _supabase.from('frases').update(dados).eq('id', id); 
+        registrarLog('EDITAR', `Painel: Editou frase #${id}`); 
+        document.getElementById('modal-frase').classList.add('hidden');
+        Swal.fire('Salvo!', '', 'success'); 
+    } catch(e) { Swal.fire('Erro', 'Falha ao salvar', 'error'); } 
 }
 
 // --- UTILS ---
 
-function animateValue(id, start, end, duration) {
-    const obj = document.getElementById(id);
-    if (!obj) return;
-    let startTimestamp = null;
-    const step = (timestamp) => {
-        if (!startTimestamp) startTimestamp = timestamp;
-        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-        obj.innerHTML = Math.floor(progress * (end - start) + start);
-        if (progress < 1) window.requestAnimationFrame(step); else obj.innerHTML = end;
-    };
-    window.requestAnimationFrame(step);
+function formatarNome(user) {
+    if(!user) return 'Desconhecido';
+    return user.charAt(0).toUpperCase() + user.slice(1);
 }
 
 function iniciarDashboardRealtime() {
-    if (dashboardSubscription) return; 
+    if (dashboardSubscription) return;
+    // Escuta logs (para atualizar contagens de uso) e frases (se alguém excluir na biblioteca)
     dashboardSubscription = _supabase
         .channel('dashboard-feed')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, () => {
-            clearTimeout(debounceDashboard);
-            debounceDashboard = setTimeout(carregarDashboard, 2000); // Debounce para não atualizar freneticamente
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'logs' }, () => {
+            clearTimeout(debounceDashboard); debounceDashboard = setTimeout(carregarDashboard, 2000);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'frases' }, () => {
+            clearTimeout(debounceDashboard); debounceDashboard = setTimeout(carregarDashboard, 2000);
         })
         .subscribe();
 }
