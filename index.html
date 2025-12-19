@@ -10,6 +10,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 
@@ -321,7 +323,7 @@
                 </section>
 
                 <section id="view-equipe" class="view-section hidden flex-grow">
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                         <div onclick="abrirGerenciadorMotivos()" class="bg-white p-6 rounded-2xl shadow-sm border border-orange-100 cursor-pointer hover:shadow-md transition flex items-center gap-4 group">
                             <div class="w-12 h-12 bg-orange-50 text-orange-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-tags"></i></div>
                             <div><h4 class="font-bold text-gray-700">Organizar Motivos</h4><p class="text-xs text-gray-400">Mesclar duplicados</p></div>
@@ -334,6 +336,11 @@
                             <div class="w-12 h-12 bg-purple-50 text-purple-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-magic"></i></div>
                             <div><h4 class="font-bold text-gray-700">Padronização Mágica</h4><p class="text-xs text-gray-400">Limpar formatação</p></div>
                         </div>
+                        <div onclick="importarPlanilhaFrases()" class="bg-white p-6 rounded-2xl shadow-sm border border-green-100 cursor-pointer hover:shadow-md transition flex items-center gap-4 group">
+                            <div class="w-12 h-12 bg-green-50 text-green-500 rounded-full flex items-center justify-center text-xl group-hover:scale-110 transition"><i class="fas fa-file-excel"></i></div>
+                            <div><h4 class="font-bold text-gray-700">Importar Planilha</h4><p class="text-xs text-gray-400">Frases em massa (xlsx)</p></div>
+                        </div>
+                        <input type="file" id="input-import-sheet" class="hidden" accept=".xlsx, .csv" onchange="processarArquivoFrases(this)">
                     </div>
 
                     <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden mb-8" id="lista-equipe-container">
