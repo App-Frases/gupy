@@ -192,19 +192,27 @@ async function salvarUsuario() {
     
     if(!u || !p || !n) return Swal.fire('Erro', 'Preencha todos os campos', 'warning'); 
     
-    // --- VALIDAÇÃO DE DUPLICIDADE ---
-    // Verifica se o username já existe em cacheEquipe
+    // --- VALIDAÇÃO "TOP" DE DUPLICIDADE ---
+    const gerarHash = (texto) => {
+        return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    };
+
     const usuarioExiste = cacheEquipe.find(user => {
-        // Se estiver editando, ignora o próprio ID
         if (id && user.id == id) return false;
-        // Compara usernames (Login)
-        return user.username.toLowerCase() === u.toLowerCase();
+        
+        // Verifica conflito de LOGIN (ID) -> Exato (case insensitive)
+        const loginConflito = user.username.toLowerCase() === u.toLowerCase();
+        
+        // Verifica conflito de NOME -> Aproximado (ignora pontuação/acento)
+        const nomeConflito = gerarHash(user.nome || '') === gerarHash(n);
+
+        return loginConflito || nomeConflito;
     });
 
     if (usuarioExiste) {
-        return Swal.fire('Erro', 'Este Login (ID) já está em uso por outro colaborador.', 'warning');
+        return Swal.fire('Atenção', 'Já existe um usuário com este Login (ID) ou Nome muito similar.', 'warning');
     }
-    // -------------------------------
+    // --------------------------------------
 
     const nomeFormatado = n.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
