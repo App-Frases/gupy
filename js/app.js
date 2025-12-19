@@ -3,6 +3,7 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let usuarioLogado = null, abaAtiva = 'biblioteca', chatAberto = false, debounceTimer;
+let cacheNomesChat = {}; // Mapa para guardar os nomes dos usuários
 
 // --- INICIALIZAÇÃO ---
 window.onload = function() { 
@@ -73,6 +74,7 @@ function entrarNoSistema() {
             if(adminMenu) { adminMenu.classList.add('hidden'); adminMenu.classList.remove('flex'); }
         }
 
+        carregarNomesChat(); // Carrega os nomes para o chat
         navegar('biblioteca'); 
         registrarLog('LOGIN', 'Acesso realizado'); 
         iniciarHeartbeat(); 
@@ -188,7 +190,7 @@ async function buscarCEP() {
     } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na busca', 'error'); }
 }
 
-// --- FUNÇÃO CALCULAR IDADE ATUALIZADA (ANOS, MESES, SEMANAS, DIAS) ---
+// --- FUNÇÃO CALCULAR IDADE (ANOS, MESES, SEMANAS, DIAS) ---
 function calcularIdade() {
     const val = document.getElementById('nasc-input').value; 
     const parts = val.split('/'); 
@@ -247,10 +249,78 @@ function mascaraData(i) { let v = i.value.replace(/\D/g, ""); if(v.length>2) v=v
 function fecharModalCEP() { document.getElementById('modal-cep').classList.add('hidden'); }
 function fecharModalIdade() { document.getElementById('modal-idade').classList.add('hidden'); }
 
-// --- CHAT ---
+// --- CHAT COM NOTIFICAÇÃO E NOMES ---
+async function carregarNomesChat() {
+    const { data } = await _supabase.from('usuarios').select('username, nome');
+    if(data) {
+        data.forEach(u => cacheNomesChat[u.username] = u.nome || u.username);
+    }
+}
+
 function iniciarHeartbeat() { const beat = async () => { await _supabase.from('usuarios').update({ultimo_visto: new Date().toISOString()}).eq('id', usuarioLogado.id); updateOnline(); }; beat(); setInterval(beat, 10000); }
 async function updateOnline() { const {data} = await _supabase.from('usuarios').select('username').gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); if(data){ document.getElementById('online-count').innerText = `${data.length} Online`; document.getElementById('online-users-list').innerText = data.map(u=>u.username).join(', '); document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); }}
-function toggleChat() { const w = document.getElementById('chat-window'); chatAberto=!chatAberto; w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; if(chatAberto){ document.getElementById('online-users-list').classList.remove('hidden'); iniciarChat(); } }
-function iniciarChat() { _supabase.from('chat_mensagens').select('*').order('created_at',{ascending:true}).limit(50).then(({data})=>{if(data)data.forEach(addMsg)}); _supabase.channel('chat').on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensagens'},p=>addMsg(p.new)).subscribe(); }
+
+function toggleChat() { 
+    const w = document.getElementById('chat-window'); 
+    chatAberto = !chatAberto; 
+    
+    // Animações de abrir/fechar
+    w.className = chatAberto 
+        ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" 
+        : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; 
+    
+    if(chatAberto){ 
+        document.getElementById('online-users-list').classList.remove('hidden'); 
+        iniciarChat(); 
+
+        // Resetar alertas (badge e cor)
+        const btn = document.getElementById('chat-toggle-btn');
+        const badge = document.getElementById('badge-unread');
+        
+        btn.classList.remove('bg-orange-500', 'hover:bg-orange-600', 'animate-bounce');
+        btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+        
+        if(badge) {
+            badge.innerText = '0';
+            badge.classList.add('hidden');
+        }
+    } 
+}
+
+function iniciarChat() { 
+    // Carrega mensagens antigas (true indica que é histórico, não deve gerar alerta)
+    _supabase.from('chat_mensagens').select('*').order('created_at',{ascending:true}).limit(50).then(({data})=>{if(data)data.forEach(m => addMsg(m, true))}); 
+    // Escuta novas mensagens (false indica mensagem nova em tempo real)
+    _supabase.channel('chat').on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensagens'},p=>addMsg(p.new, false)).subscribe(); 
+}
+
 async function enviarMensagem() { const i = document.getElementById('chat-input'); if(i.value.trim()){ await _supabase.from('chat_mensagens').insert([{usuario:usuarioLogado.username, mensagem:i.value.trim(), perfil:usuarioLogado.perfil}]); i.value=''; } }
-function addMsg(msg) { const c = document.getElementById('chat-messages'); const me = msg.usuario === usuarioLogado.username; c.innerHTML += `<div class="flex flex-col ${me?'items-end':'items-start'} mb-2"><span class="text-[9px] text-gray-400 font-bold ml-1">${me?'':msg.usuario}</span><div class="px-3 py-2 rounded-xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm">${msg.mensagem}</div></div>`; c.scrollTop = c.scrollHeight; }
+
+function addMsg(msg, isHistory = false) { 
+    const c = document.getElementById('chat-messages'); 
+    const me = msg.usuario === usuarioLogado.username; 
+    
+    // Resolve o nome: usa o cache ou o próprio ID se não encontrar
+    const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario;
+
+    c.innerHTML += `<div class="flex flex-col ${me?'items-end':'items-start'} mb-2"><span class="text-[9px] text-gray-400 font-bold ml-1">${me?'':nomeMostrar}</span><div class="px-3 py-2 rounded-xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm">${msg.mensagem}</div></div>`; 
+    c.scrollTop = c.scrollHeight; 
+
+    // LÓGICA DE ALERTA VISUAL
+    // Só alerta se: NÃO for histórico, o chat estiver fechado E a mensagem não for minha
+    if (!isHistory && !chatAberto && !me) {
+        const btn = document.getElementById('chat-toggle-btn');
+        const badge = document.getElementById('badge-unread');
+
+        if(btn) {
+            btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            btn.classList.add('bg-orange-500', 'hover:bg-orange-600', 'animate-bounce'); // Muda cor e pula
+        }
+        
+        if(badge) {
+            const atual = parseInt(badge.innerText || '0');
+            badge.innerText = atual + 1;
+            badge.classList.remove('hidden');
+        }
+    }
+}
