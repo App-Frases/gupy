@@ -184,7 +184,7 @@ function prepararEdicaoUsuario(id, username, senha, perfil, nome, ativo) {
 
 async function salvarUsuario() { 
     const id = document.getElementById('id-user-edit').value; 
-    const u = document.getElementById('user-novo').value; 
+    const u = document.getElementById('user-novo').value.trim(); 
     const n = document.getElementById('nome-novo').value;
     const p = document.getElementById('pass-novo').value; 
     const r = document.getElementById('perfil-novo').value;
@@ -192,6 +192,20 @@ async function salvarUsuario() {
     
     if(!u || !p || !n) return Swal.fire('Erro', 'Preencha todos os campos', 'warning'); 
     
+    // --- VALIDAÇÃO DE DUPLICIDADE ---
+    // Verifica se o username já existe em cacheEquipe
+    const usuarioExiste = cacheEquipe.find(user => {
+        // Se estiver editando, ignora o próprio ID
+        if (id && user.id == id) return false;
+        // Compara usernames (Login)
+        return user.username.toLowerCase() === u.toLowerCase();
+    });
+
+    if (usuarioExiste) {
+        return Swal.fire('Erro', 'Este Login (ID) já está em uso por outro colaborador.', 'warning');
+    }
+    // -------------------------------
+
     const nomeFormatado = n.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 
     try { 
