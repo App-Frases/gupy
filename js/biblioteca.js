@@ -34,12 +34,8 @@ async function copiarTexto(id) {
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
-        _supabase.from('logs').insert([{
-            usuario: usuarioLogado.username, 
-            acao: 'COPIAR_RANK', 
-            detalhe: String(id), 
-            data_hora: new Date().toISOString()
-        }]).then(() => {}); 
+        // Não enviamos data, o banco gera
+        registrarLog('COPIAR', String(id)); 
 
         const novoUso = (f.usos || 0) + 1;
         const agora = new Date().toISOString();
@@ -59,9 +55,9 @@ function aplicarFiltros(origem) {
     const elMotivo = document.getElementById('filtro-motivo');
     const elDoc = document.getElementById('filtro-doc');
 
-    const valEmpresa = elEmpresa.value;
-    const valMotivo = elMotivo.value;
-    const valDoc = elDoc.value;
+    const valEmpresa = elEmpresa ? elEmpresa.value : '';
+    const valMotivo = elMotivo ? elMotivo.value : '';
+    const valDoc = elDoc ? elDoc.value : '';
 
     const temFiltro = termo !== '' || valEmpresa !== '' || valMotivo !== '' || valDoc !== '';
     let base = cacheFrases;
@@ -74,7 +70,6 @@ function aplicarFiltros(origem) {
 
     updateSelect('filtro-empresa', optsEmpresa, 'empresa', '🏢 Empresas', valEmpresa);
     updateSelect('filtro-motivo', optsMotivo, 'motivo', '🎯 Motivos', valMotivo);
-    // Alterado de 'Docs' para 'Documentos'
     updateSelect('filtro-doc', optsDoc, 'documento', '📄 Documentos', valDoc);
 
     const filtrados = base.filter(f => 
@@ -85,7 +80,6 @@ function aplicarFiltros(origem) {
     
     let listaFinal;
 
-    // Removemos a geração do título para aproximar as frases
     if (!temFiltro) {
         listaFinal = filtrados.slice(0, 4);
     } else {
@@ -97,7 +91,7 @@ function aplicarFiltros(origem) {
 
 function updateSelect(id, list, key, label, currentValue) { 
     const sel = document.getElementById(id); 
-    if(document.activeElement === sel) return; 
+    if(!sel || document.activeElement === sel) return; 
     const uniq = [...new Set(list.map(i=>i[key]).filter(Boolean))].sort(); 
     sel.innerHTML = `<option value="">${label}</option>` + uniq.map(u=>`<option value="${u}">${u}</option>`).join(''); 
     if (uniq.includes(currentValue)) sel.value = currentValue; else sel.value = "";
@@ -139,7 +133,6 @@ function renderizarBiblioteca(lista) {
         </div>`;
     }).join('');
 
-    // Removemos o tituloHtml daqui
     grid.innerHTML = cards;
 }
 
@@ -153,27 +146,16 @@ function limparFiltros() {
 // --- UTIL: PADRONIZAÇÃO DE TEXTO ---
 function padronizarFraseInteligente(texto) {
     if (!texto) return "";
-    
-    // 1. Remove espaços extras
     let t = texto.replace(/\s+/g, ' ').trim();
-    
-    // 2. Remove aspas do início e fim
-    t = t.replace(/^"+|"+$/g, '');
-    
-    // 3. Limpa novamente
+    t = t.replace(/^"+|"+$/g, ''); // Remove aspas inicio/fim
     t = t.trim();
-
-    // 4. Corrige pontuação
     t = t.replace(/\s+([.,!?;:])/g, '$1'); 
     t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 '); 
-
-    // 5. Capitalização
     const letras = t.replace(/[^a-zA-Z]/g, '');
     if (letras.length > 4 && letras === letras.toUpperCase()) {
         t = t.toLowerCase();
     }
     t = t.charAt(0).toUpperCase() + t.slice(1);
-
     return t;
 }
 
@@ -202,14 +184,28 @@ function editarFrase(f) {
 
 async function salvarFrase() { 
     const id = document.getElementById('id-frase').value; 
+    
+    // Captura os valores brutos
+    const rawEmpresa = document.getElementById('inp-empresa').value.trim();
+    const rawMotivo = document.getElementById('inp-motivo').value.trim();
+    const rawDoc = document.getElementById('inp-doc').value.trim();
     const rawConteudo = document.getElementById('inp-conteudo').value;
+
+    // --- VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS (NOVO) ---
+    if (!rawEmpresa || !rawMotivo || !rawDoc || !rawConteudo.trim()) {
+        return Swal.fire({
+            title: 'Campos Obrigatórios',
+            text: 'Por favor, preencha todos os campos: Empresa, Motivo, Documento e Conteúdo.',
+            icon: 'warning',
+            confirmButtonColor: '#3b82f6'
+        });
+    }
+    // -----------------------------------------------
     
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
     
-    if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
-
+    // Validação de Duplicidade
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
-
     const duplicada = cacheFrases.some(f => {
         if (id && f.id == id) return false; 
         const bancoPuro = normalizar(f.conteudo).replace(/[^\w]/g, '');
@@ -219,15 +215,15 @@ async function salvarFrase() {
     if (duplicada) {
         return Swal.fire({
             title: 'Frase Duplicada',
-            text: 'Esta frase já existe na biblioteca (mesmo com pontuação ou aspas diferentes).',
+            text: 'Esta frase já existe na biblioteca.',
             icon: 'warning'
         });
     }
 
     const dados = { 
-        empresa: formatarTextoBonito(document.getElementById('inp-empresa').value, 'titulo'), 
-        motivo: formatarTextoBonito(document.getElementById('inp-motivo').value, 'titulo'), 
-        documento: formatarTextoBonito(document.getElementById('inp-doc').value, 'titulo'), 
+        empresa: formatarTextoBonito(rawEmpresa, 'titulo'), 
+        motivo: formatarTextoBonito(rawMotivo, 'titulo'), 
+        documento: formatarTextoBonito(rawDoc, 'titulo'), 
         conteudo: conteudoLimpo, 
         revisado_por: usuarioLogado.username 
     }; 
@@ -235,21 +231,23 @@ async function salvarFrase() {
     try { 
         if(id) { 
             await _supabase.from('frases').update(dados).eq('id', id); 
-            registrarLog('EDITAR', `Editou frase #${id}`); 
+            registrarLog('EDITAR', id); // Envia apenas ID, banco gera data
         } else { 
-            await _supabase.from('frases').insert([dados]); 
-            registrarLog('CRIAR', `Nova frase`); 
+            const { data } = await _supabase.from('frases').insert([dados]).select(); 
+            // Se conseguir pegar o ID do novo, registra
+            if(data && data[0]) registrarLog('CRIAR', data[0].id);
+            else registrarLog('CRIAR', 'Nova frase');
         } 
         document.getElementById('modal-frase').classList.add('hidden'); 
         carregarFrases(); 
-        Swal.fire('Salvo!', 'Frase salva e padronizada com sucesso.', 'success'); 
+        Swal.fire('Salvo!', 'Frase salva com sucesso.', 'success'); 
     } catch(e) { Swal.fire('Erro', 'Falha ao salvar', 'error'); } 
 }
 
 async function deletarFraseBiblioteca(id) {
     if((await Swal.fire({title:'Excluir?', text: "Esta ação não pode ser desfeita.", icon: 'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Sim, excluir'})).isConfirmed) {
         await _supabase.from('frases').delete().eq('id', id);
-        registrarLog('EXCLUIR', `Apagou frase #${id}`);
+        registrarLog('EXCLUIR', id);
         carregarFrases();
         Swal.fire('Excluído!', '', 'success');
     }
