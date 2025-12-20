@@ -19,6 +19,7 @@ window.onload = function() {
                 document.getElementById('login-flow').classList.add('hidden');
                 document.getElementById('first-access-modal').classList.remove('hidden');
             } else {
+                // Ao recarregar a página, apenas restauramos a UI, SEM GERAR LOG
                 entrarNoSistema(); 
             }
         } 
@@ -49,6 +50,8 @@ async function fazerLogin() {
                     document.getElementById('login-flow').classList.add('hidden');
                     document.getElementById('first-access-modal').classList.remove('hidden');
             } else {
+                    // AQUI SIM: O usuário acabou de digitar a senha, então registramos o log
+                    registrarLog('LOGIN', 'Acesso realizado via Login'); 
                     entrarNoSistema();
             }
         } else Swal.fire('Erro', 'Dados incorretos', 'warning');
@@ -78,7 +81,10 @@ function entrarNoSistema() {
 
         carregarNomesChat();
         navegar('biblioteca'); 
-        registrarLog('LOGIN', 'Acesso realizado'); 
+        
+        // REMOVIDO: registrarLog('LOGIN', 'Acesso realizado'); 
+        // Motivo: Isso duplicava o log ao dar F5 na página. Agora o log fica apenas no submit do form.
+
         iniciarHeartbeat(); 
         iniciarChat();
     } catch (error) {
@@ -96,10 +102,18 @@ async function atualizarSenhaPrimeiroAcesso() {
     usuarioLogado.primeiro_acesso = false; 
     localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
     document.getElementById('first-access-modal').classList.add('hidden'); 
+    
+    // Registra log pois acabou de ativar a conta e entrar
+    registrarLog('LOGIN', 'Ativou conta e acessou');
     entrarNoSistema();
 }
 
-function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
+function logout() { 
+    // Opcional: Registrar Logout se quiser
+    // registrarLog('LOGOUT', 'Saiu do sistema'); 
+    localStorage.removeItem('gupy_session'); 
+    location.reload(); 
+}
 
 async function registrarLog(acao, detalhe) { 
     if(usuarioLogado) {
@@ -126,28 +140,23 @@ function navegar(pagina) {
     if(btnAtivo) btnAtivo.classList.add('active-nav');
     
     // --- CONTROLE DOS BOTÕES GLOBAIS (TOPO) ---
-    // Reseta todos
     const btns = ['btn-add-global', 'btn-add-member', 'btn-refresh-logs'];
     btns.forEach(b => {
         const el = document.getElementById(b);
         if(el) { el.classList.add('hidden'); el.classList.remove('flex'); }
     });
     
-    // Mostra o específico da página
     if (pagina === 'biblioteca') {
         const btn = document.getElementById('btn-add-global');
         if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); } 
-        
-        // Botão de Filtro (só existe na biblioteca)
         const btnFilter = document.getElementById('btn-toggle-filters');
         if(btnFilter) { btnFilter.classList.remove('hidden'); btnFilter.classList.add('flex'); }
-        
         carregarFrases();
     } else {
-        // Esconde botão de filtro nas outras páginas
         const btnFilter = document.getElementById('btn-toggle-filters');
         if(btnFilter) { btnFilter.classList.add('hidden'); btnFilter.classList.remove('flex'); }
-        document.getElementById('filter-panel').classList.add('hidden'); // Garante que fecha o painel
+        const p = document.getElementById('filter-panel');
+        if(p) p.classList.add('hidden');
     }
 
     if (pagina === 'equipe') {
@@ -173,17 +182,16 @@ function navegar(pagina) {
     }
 }
 
-// --- FUNÇÃO DO NOVO BOTÃO DE FILTRO ---
 function toggleFiltros() {
     const panel = document.getElementById('filter-panel');
     const btn = document.getElementById('btn-toggle-filters');
     
     if(panel.classList.contains('hidden')) {
         panel.classList.remove('hidden');
-        btn.classList.add('bg-blue-50', 'text-blue-600', 'border-blue-200'); // Estilo ativo
+        btn.classList.add('bg-blue-50', 'text-blue-600', 'border-blue-200');
     } else {
         panel.classList.add('hidden');
-        btn.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-200'); // Estilo inativo
+        btn.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-200');
     }
 }
 
