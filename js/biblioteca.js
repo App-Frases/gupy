@@ -16,7 +16,6 @@ async function carregarFrases() {
 
         // 2. Busca Pessoal (Para Colaboradores)
         let meusUsosMap = {};
-        // Só buscamos os stats pessoais se NÃO for admin ou se quisermos manter o dado guardado
         if (usuarioLogado) {
             const { data: meusStats, error: erroStats } = await _supabase
                 .from('view_usos_pessoais') 
@@ -37,9 +36,9 @@ async function carregarFrases() {
             _busca: normalizar(f.conteudo + f.empresa + f.motivo + f.documento)
         }));
 
-        // 4. ORDENAÇÃO CONDICIONAL (A MUDANÇA ESTÁ AQUI)
+        // 4. ORDENAÇÃO CONDICIONAL
         if (usuarioLogado.perfil === 'admin') {
-            // ADMIN: Ordena puramente pelo uso GLOBAL (Total da Empresa)
+            // ADMIN: Ordena puramente pelo uso GLOBAL
             cacheFrases.sort((a, b) => (b.usos || 0) - (a.usos || 0));
         } else {
             // COLABORADOR: Prioriza o uso PESSOAL
@@ -64,20 +63,18 @@ async function copiarTexto(id) {
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
+        // AQUI ESTÁ A CORREÇÃO:
+        // Apenas registramos o Log. O Trigger SQL que criamos vai atualizar a tabela 'frases' sozinho.
+        // Removemos o comando "_supabase.from('frases').update..." para evitar sobrescrever com valor antigo.
         await registrarLog('COPIAR', String(id)); 
 
-        const novoUsoGlobal = (f.usos || 0) + 1;
-        const agora = new Date().toISOString();
-        _supabase.from('frases').update({ usos: novoUsoGlobal, ultimo_uso: agora }).eq('id', id).then();
-
-        // Atualiza objetos locais
-        f.usos = novoUsoGlobal;
+        // Atualização Otimista (Visual apenas) para o usuário ver na hora
+        // (Nota: na próxima recarga, virá o valor correto do banco)
+        f.usos = (f.usos || 0) + 1;
         f.meus_usos = (f.meus_usos || 0) + 1;
 
-        // Atualiza visualmente APENAS o card clicado
         const elContador = document.querySelector(`#card-frase-${id} .contador-usos`);
         if(elContador) {
-            // Reaplica a lógica visual para garantir consistência
             if (usuarioLogado.perfil === 'admin') {
                 elContador.innerHTML = `<i class="fas fa-chart-line mr-1 text-blue-600"></i> ${f.usos} usos na empresa`;
             } else {
@@ -117,7 +114,6 @@ function aplicarFiltros(origem) {
         (valDoc ? f.documento === valDoc : true)
     );
     
-    // Se não tem filtro, pega os Top 4 (já ordenados corretamente no carregarFrases)
     const listaFinal = !temFiltro ? filtrados.slice(0, 4) : filtrados;
 
     renderizarBiblioteca(listaFinal, !temFiltro); 
@@ -141,16 +137,13 @@ function renderizarBiblioteca(lista, isTop4) {
         const idSafe = f.id;
         const objSafe = JSON.stringify(f).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         
-        // --- VISUALIZAÇÃO DIFERENCIADA (ADMIN vs COLAB) ---
         let textoContador;
         let iconeContador;
 
         if (usuarioLogado.perfil === 'admin') {
-            // ADMIN: Vê sempre o total da empresa
             textoContador = `${f.usos || 0} usos na empresa`;
             iconeContador = "fa-chart-line text-blue-600";
         } else {
-            // COLABORADOR: Vê o seu uso (ou global se for zero)
             if (f.meus_usos > 0) {
                 textoContador = `${f.meus_usos} vezes usado por mim`;
                 iconeContador = "fa-user-check text-blue-500";
