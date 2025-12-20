@@ -136,14 +136,19 @@ function navegar(pagina) {
     const filterBar = document.getElementById('filter-bar');
     if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
     
+    // Reseta visibilidade dos botões
     const btns = ['btn-add-global', 'btn-add-member', 'btn-refresh-logs'];
-    // Reseta todos para hidden
-    btns.forEach(b => document.getElementById(b)?.classList.add('hidden'));
-    btns.forEach(b => document.getElementById(b)?.classList.remove('flex')); // Garante que tira o flex se tiver
+    btns.forEach(b => {
+        const el = document.getElementById(b);
+        if(el) {
+            el.classList.add('hidden');
+            el.classList.remove('flex'); // Remove flex para garantir que o hidden funcione
+        }
+    });
     
     if (pagina === 'biblioteca') {
         const btn = document.getElementById('btn-add-global');
-        if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); } // CORRIGIDO: Exibe com flex para alinhar ícone
+        if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); } // Adiciona flex para alinhar ícone
         carregarFrases();
     } else if (pagina === 'equipe') {
         const btn = document.getElementById('btn-add-member');
