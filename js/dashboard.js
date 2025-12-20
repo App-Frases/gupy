@@ -5,7 +5,7 @@ let dashboardSubscription = null;
 async function carregarDashboard() {
     const painel = document.getElementById('painel-dashboard');
     
-    // Verificação de segurança visual
+    // Segurança visual
     if (!usuarioLogado || usuarioLogado.perfil !== 'admin') {
         if(painel) painel.classList.add('hidden');
         return; 
@@ -13,13 +13,13 @@ async function carregarDashboard() {
     if(painel) painel.classList.remove('hidden');
 
     try {
-        // Só mostra loading se a tabela estiver vazia (primeira carga)
+        // Exibe loading se for a primeira vez
         const tabela = document.getElementById('lista-top-users');
         if(!tabela || tabela.innerHTML === '') exibirCarregando();
         
-        // --- 1. BUSCA DE DADOS (Snapshot Inicial) ---
+        // --- 1. BUSCA DE DADOS (Otimizada) ---
         
-        // Mapeamento de usuários
+        // Mapa de Nomes
         const { data: usuariosData } = await _supabase.from('usuarios').select('username, nome');
         const mapaNomes = {};
         if (usuariosData) {
@@ -34,23 +34,32 @@ async function carregarDashboard() {
         dataCorte.setDate(dataCorte.getDate() - 90);
         const { data: semUso90d } = await _supabase.from('frases').select('*').or(`ultimo_uso.lt.${dataCorte.toISOString()},ultimo_uso.is.null`).order('ultimo_uso', { ascending: true });
         
-        // Logs e Totais
-        const { data: logsUsuarios } = await _supabase.from('logs').select('usuario');
+        // CORREÇÃO DO LIMITE DE 1000
+        // 1. Para o KPI Total: Pedimos ao banco apenas o NÚMERO (count), sem baixar os dados. É rápido e ilimitado.
+        const { count: totalInteracoesReal } = await _supabase.from('logs').select('*', { count: 'exact', head: true });
+
+        // 2. Para o Ranking: Baixamos os últimos 5000 logs para calcular quem está mais ativo recentemente.
+        // O limite padrão é 1000, por isso o ranking podia estar impreciso.
+        const { data: logsParaRanking } = await _supabase
+            .from('logs')
+            .select('usuario')
+            .order('data_hora', { ascending: false }) // Pega os mais recentes
+            .limit(5000); 
+        
         const { count: totalFrases } = await _supabase.from('frases').select('*', { count: 'exact', head: true });
         
         // --- 2. PROCESSAMENTO ---
         
-        const rankingUsuarios = processarRankingUsuarios(logsUsuarios, mapaNomes);
+        const rankingUsuarios = processarRankingUsuarios(logsParaRanking, mapaNomes);
         
         const topLista = topFrases || [];
         const idsTop = topLista.map(f => f.id);
         const lowLista = (lowCandidates || []).filter(f => !idsTop.includes(f.id)).slice(0, 5);
-        const totalUsosGerais = logsUsuarios ? logsUsuarios.length : 0;
 
         // --- 3. RENDERIZAÇÃO ---
 
         renderizarKPIs({ 
-            totalUsos: totalUsosGerais, 
+            totalUsos: totalInteracoesReal || 0, // Agora usa o count real do banco
             totalFrases: totalFrases || 0, 
             totalInativas: semUso90d?.length || 0, 
             totalUsers: rankingUsuarios.all.length 
@@ -62,7 +71,7 @@ async function carregarDashboard() {
         renderizarLowFrases(lowLista, 'lista-low-frases');
         renderizarFrasesSemUso(semUso90d || [], mapaNomes);
 
-        // --- 4. REALTIME (CONEXÃO ROBUSTA) ---
+        // --- 4. REALTIME ---
         iniciarRealtimeDashboard();
 
     } catch (e) {
@@ -71,50 +80,33 @@ async function carregarDashboard() {
 }
 
 function iniciarRealtimeDashboard() {
-    // Se já existe, não recria para evitar duplicidade
     if (dashboardSubscription) return;
 
     console.log("🔌 Iniciando conexão Realtime...");
 
-    dashboardSubscription = _supabase.channel('dashboard-room-v2') // Nome novo para forçar reset
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'logs' }, payload => {
-            console.log('⚡ Mudança detectada em LOGS:', payload.eventType);
+    dashboardSubscription = _supabase.channel('dashboard-v3-fix') // Nome novo para garantir reset
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'logs' }, () => {
+            console.log('⚡ Novo log detectado -> Atualizando...');
             atualizarAposDelay();
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'frases' }, payload => {
-            console.log('⚡ Mudança detectada em FRASES:', payload.eventType);
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'frases' }, () => {
             atualizarAposDelay();
         })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, payload => {
-            console.log('⚡ Mudança detectada em USUARIOS:', payload.eventType);
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => {
             atualizarAposDelay();
         })
-        .subscribe((status) => {
-            console.log("📡 Status da Conexão:", status);
-            if (status === 'SUBSCRIBED') {
-                // Conexão bem sucedida
-                const kpi = document.getElementById('kpi-total-usos');
-                if(kpi) kpi.style.color = '#2563eb'; // Azul normal
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                console.error("❌ Erro no Realtime. Tentando reconectar...");
-                _supabase.removeChannel(dashboardSubscription);
-                dashboardSubscription = null;
-                setTimeout(iniciarRealtimeDashboard, 5000); // Tenta de novo em 5s
-            }
-        });
+        .subscribe();
 }
 
-// Pequeno delay para evitar recarregar 10 vezes se entrarem 10 logs de uma vez
 let timeoutUpdate;
 function atualizarAposDelay() {
     clearTimeout(timeoutUpdate);
     timeoutUpdate = setTimeout(() => {
-        console.log("🔄 Atualizando Dashboard...");
         carregarDashboard();
-    }, 1000);
+    }, 1000); // Espera 1s para acumular alterações e não piscar a tela
 }
 
-// --- FUNÇÕES AUXILIARES DE RENDERIZAÇÃO ---
+// --- FUNÇÕES AUXILIARES ---
 
 function processarRankingUsuarios(logs, mapaNomes) {
     if(!logs) return { top5: [], bottom5: [], all: [] };
@@ -146,14 +138,14 @@ function processarRankingUsuarios(logs, mapaNomes) {
 function formatarNomeUser(u) { return u.charAt(0).toUpperCase() + u.slice(1); }
 
 function exibirCarregando() {
-    const loading = '<tr><td colspan="4" class="p-4 text-center text-slate-400 animate-pulse text-xs"><i class="fas fa-sync fa-spin mr-2"></i>Sincronizando...</td></tr>';
+    const loading = '<tr><td colspan="4" class="p-4 text-center text-slate-400 animate-pulse text-xs"><i class="fas fa-sync fa-spin mr-2"></i>Calculando métricas...</td></tr>';
     ['lista-top-users', 'lista-bottom-users', 'lista-top-frases', 'lista-low-frases', 'lista-frases-sem-uso'].forEach(id => {
         const el = document.getElementById(id); if(el) el.innerHTML = loading;
     });
 }
 
 function renderizarKPIs(stats) {
-    const set = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val; };
+    const set = (id, val) => { const el = document.getElementById(id); if(el) el.innerText = val.toLocaleString('pt-BR'); };
     set('kpi-total-usos', stats.totalUsos);
     set('kpi-frases-ativas', stats.totalFrases);
     set('kpi-total-users', stats.totalUsers);
@@ -168,7 +160,7 @@ function renderizarKPIs(stats) {
 function renderizarTabelaUsuarios(lista, elementId, corTheme) {
     const tbody = document.getElementById(elementId);
     if (!tbody) return;
-    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Aguardando dados...</td></tr>'; return; }
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Sem dados recentes.</td></tr>'; return; }
 
     tbody.innerHTML = lista.map((u, i) => `
         <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition">
@@ -230,7 +222,7 @@ function renderizarLowFrases(lista, elementId) {
 function renderizarFrasesSemUso(lista, mapaNomes) {
     const tbody = document.getElementById('lista-frases-sem-uso');
     if (!tbody) return;
-    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-6 text-center text-green-600 bg-green-50/50 rounded-lg text-sm font-bold"><i class="fas fa-check-circle mr-2"></i>Tudo limpo (90d)!</td></tr>'; return; }
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-6 text-center text-green-600 bg-green-50/50 rounded-lg text-sm font-bold"><i class="fas fa-check-circle mr-2"></i>Tudo limpo!</td></tr>'; return; }
 
     tbody.innerHTML = lista.map(f => {
         let diasSemUso = "Nunca";
@@ -253,6 +245,6 @@ async function deletarFraseDashboard(id) {
     const result = await Swal.fire({title: 'Limpar frase?', text: `Frase #${id} inativa.`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Sim, excluir'});
     if (result.isConfirmed) {
         await _supabase.from('frases').delete().eq('id', id);
-        registrarLog('LIMPEZA', `Dashboard: Removeu frase #${id}`);
+        // Não precisa registrarLog aqui pois o trigger do banco já avisa o dashboard para atualizar
     }
 }
