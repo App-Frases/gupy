@@ -150,6 +150,33 @@ function limparFiltros() {
     aplicarFiltros('inicio'); 
 }
 
+// --- UTIL: PADRONIZAÇÃO DE TEXTO ---
+function padronizarFraseInteligente(texto) {
+    if (!texto) return "";
+    
+    // 1. Remove espaços extras (inicio, fim e duplos no meio)
+    let t = texto.replace(/\s+/g, ' ').trim();
+    
+    // 2. Corrige pontuação (remove espaço antes de vírgula/ponto, garante espaço depois)
+    // Remove espaço antes: "olá , mundo" -> "olá, mundo"
+    t = t.replace(/\s+([.,!?;:])/g, '$1');
+    // Adiciona espaço depois se não houver: "olá,mundo" -> "olá, mundo" (exceto se for fim da string ou números 1.2)
+    t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 ');
+
+    // 3. Capitalização (Sentence Case) 
+    // Se o texto for > 5 chars e estiver TUDO EM MAIÚSCULO, converte para minúsculo
+    // (Evita gritaria, mas mantém siglas curtas como "GUPY" se for o caso)
+    const letras = t.replace(/[^a-zA-Z]/g, '');
+    if (letras.length > 4 && letras === letras.toUpperCase()) {
+        t = t.toLowerCase();
+    }
+    
+    // Garante primeira letra maiúscula
+    t = t.charAt(0).toUpperCase() + t.slice(1);
+
+    return t;
+}
+
 // --- CRUD ---
 
 function abrirModalFrase() { 
@@ -176,20 +203,18 @@ function editarFrase(f) {
 async function salvarFrase() { 
     const id = document.getElementById('id-frase').value; 
     const rawConteudo = document.getElementById('inp-conteudo').value;
-    let conteudoLimpo = rawConteudo.trim();
-    if(conteudoLimpo) conteudoLimpo = conteudoLimpo.charAt(0).toUpperCase() + conteudoLimpo.slice(1);
+    
+    // --- PADRONIZAÇÃO AQUI ---
+    const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
     
     if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
 
-    // --- NOVA VALIDAÇÃO DE DUPLICIDADE (IGNORANDO PONTUAÇÃO) ---
-    // Remove tudo que não é letra ou número para comparar (ex: "olá, mundo!" vira "olamundo")
-    // A função 'normalizar' remove acentos e 'replace' remove símbolos
+    // --- VALIDAÇÃO DE DUPLICIDADE ---
+    // Compara ignorando pontuação e espaços
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
 
     const duplicada = cacheFrases.some(f => {
-        // Se estiver editando, ignora a si mesmo
-        if (id && f.id == id) return false;
-        
+        if (id && f.id == id) return false; // Ignora a própria frase se estiver editando
         const bancoPuro = normalizar(f.conteudo).replace(/[^\w]/g, '');
         return inputPuro === bancoPuro;
     });
@@ -197,11 +222,10 @@ async function salvarFrase() {
     if (duplicada) {
         return Swal.fire({
             title: 'Frase Duplicada',
-            text: 'Já existe uma frase com este conteúdo na biblioteca (mesmo com pontuação diferente).',
+            text: 'Esta frase já existe na biblioteca (mesmo com pontuação diferente). O sistema padronizou sua entrada para verificar.',
             icon: 'warning'
         });
     }
-    // ------------------------------------------------------------
 
     const dados = { 
         empresa: formatarTextoBonito(document.getElementById('inp-empresa').value, 'titulo'), 
@@ -221,7 +245,7 @@ async function salvarFrase() {
         } 
         document.getElementById('modal-frase').classList.add('hidden'); 
         carregarFrases(); 
-        Swal.fire('Salvo!', '', 'success'); 
+        Swal.fire('Salvo!', 'Frase salva e padronizada com sucesso.', 'success'); 
     } catch(e) { Swal.fire('Erro', 'Falha ao salvar', 'error'); } 
 }
 
