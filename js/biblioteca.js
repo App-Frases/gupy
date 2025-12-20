@@ -74,7 +74,8 @@ function aplicarFiltros(origem) {
 
     updateSelect('filtro-empresa', optsEmpresa, 'empresa', '🏢 Empresas', valEmpresa);
     updateSelect('filtro-motivo', optsMotivo, 'motivo', '🎯 Motivos', valMotivo);
-    updateSelect('filtro-doc', optsDoc, 'documento', '📄 Docs', valDoc);
+    // Alterado de 'Docs' para 'Documentos'
+    updateSelect('filtro-doc', optsDoc, 'documento', '📄 Documentos', valDoc);
 
     const filtrados = base.filter(f => 
         (valEmpresa ? f.empresa === valEmpresa : true) && 
@@ -83,17 +84,15 @@ function aplicarFiltros(origem) {
     );
     
     let listaFinal;
-    let tituloHtml = "";
 
+    // Removemos a geração do título para aproximar as frases
     if (!temFiltro) {
         listaFinal = filtrados.slice(0, 4);
-        tituloHtml = `<div class="col-span-full mb-2 flex items-center gap-2"><i class="fas fa-fire text-orange-500"></i> <span class="font-bold text-slate-500 text-xs uppercase tracking-wider">Top 4 Mais Usadas</span></div>`;
     } else {
         listaFinal = filtrados;
-        tituloHtml = `<div class="col-span-full mb-2 flex items-center gap-2"><i class="fas fa-search text-blue-500"></i> <span class="font-bold text-slate-500 text-xs uppercase tracking-wider">Resultados (${listaFinal.length})</span></div>`;
     }
 
-    renderizarBiblioteca(listaFinal, tituloHtml); 
+    renderizarBiblioteca(listaFinal); 
 }
 
 function updateSelect(id, list, key, label, currentValue) { 
@@ -104,7 +103,7 @@ function updateSelect(id, list, key, label, currentValue) {
     if (uniq.includes(currentValue)) sel.value = currentValue; else sel.value = "";
 }
 
-function renderizarBiblioteca(lista, tituloHtml) { 
+function renderizarBiblioteca(lista) { 
     const grid = document.getElementById('grid-frases'); 
     if(!grid) return;
     
@@ -140,7 +139,8 @@ function renderizarBiblioteca(lista, tituloHtml) {
         </div>`;
     }).join('');
 
-    grid.innerHTML = tituloHtml + cards;
+    // Removemos o tituloHtml daqui
+    grid.innerHTML = cards;
 }
 
 function limparFiltros() { 
@@ -157,16 +157,15 @@ function padronizarFraseInteligente(texto) {
     // 1. Remove espaços extras
     let t = texto.replace(/\s+/g, ' ').trim();
     
-    // 2. NOVO: Remove aspas do início e fim
-    // Ex: "Olá" -> Olá (Remove aspas duplas)
+    // 2. Remove aspas do início e fim
     t = t.replace(/^"+|"+$/g, '');
     
-    // 3. Limpa novamente (caso as aspas escondessem espaços como em ' " ola " ')
+    // 3. Limpa novamente
     t = t.trim();
 
     // 4. Corrige pontuação
-    t = t.replace(/\s+([.,!?;:])/g, '$1'); // Remove espaço antes de pontuação
-    t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 '); // Garante espaço depois
+    t = t.replace(/\s+([.,!?;:])/g, '$1'); 
+    t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 '); 
 
     // 5. Capitalização
     const letras = t.replace(/[^a-zA-Z]/g, '');
@@ -205,13 +204,10 @@ async function salvarFrase() {
     const id = document.getElementById('id-frase').value; 
     const rawConteudo = document.getElementById('inp-conteudo').value;
     
-    // --- PADRONIZAÇÃO AQUI ---
-    // Agora remove as aspas do início/fim automaticamente
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
     
     if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
 
-    // --- VALIDAÇÃO DE DUPLICIDADE ---
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
 
     const duplicada = cacheFrases.some(f => {
