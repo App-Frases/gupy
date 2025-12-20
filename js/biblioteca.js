@@ -34,7 +34,6 @@ async function copiarTexto(id) {
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
-        // Não enviamos data, o banco gera
         registrarLog('COPIAR', String(id)); 
 
         const novoUso = (f.usos || 0) + 1;
@@ -147,7 +146,7 @@ function limparFiltros() {
 function padronizarFraseInteligente(texto) {
     if (!texto) return "";
     let t = texto.replace(/\s+/g, ' ').trim();
-    t = t.replace(/^"+|"+$/g, ''); // Remove aspas inicio/fim
+    t = t.replace(/^"+|"+$/g, ''); 
     t = t.trim();
     t = t.replace(/\s+([.,!?;:])/g, '$1'); 
     t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 '); 
@@ -161,13 +160,33 @@ function padronizarFraseInteligente(texto) {
 
 // --- CRUD ---
 
+// Função Nova: Popula as Datalists (Sugestões)
+function atualizarSugestoesModal() {
+    const preencher = (idLista, chave) => {
+        const lista = document.getElementById(idLista);
+        if(!lista) return;
+        // Pega valores únicos, remove vazios e ordena
+        const valores = [...new Set(cacheFrases.map(f => f[chave]))].filter(Boolean).sort();
+        lista.innerHTML = valores.map(v => `<option value="${v}">`).join('');
+    };
+
+    preencher('list-empresas', 'empresa');
+    preencher('list-motivos', 'motivo');
+    preencher('list-docs', 'documento');
+}
+
 function abrirModalFrase() { 
     document.getElementById('id-frase').value=''; 
     document.getElementById('inp-conteudo').value=''; 
     document.getElementById('inp-empresa').value=''; 
     document.getElementById('inp-motivo').value=''; 
     document.getElementById('inp-doc').value=''; 
+    
     document.getElementById('modal-title').innerHTML='Nova Frase'; 
+    
+    // Atualiza as sugestões antes de abrir
+    atualizarSugestoesModal();
+    
     document.getElementById('modal-frase').classList.remove('hidden'); 
 }
 
@@ -178,7 +197,12 @@ function editarFrase(f) {
     document.getElementById('inp-motivo').value = f.motivo; 
     document.getElementById('inp-doc').value = f.documento; 
     document.getElementById('inp-conteudo').value = f.conteudo; 
+    
     document.getElementById('modal-title').innerHTML = `Editar #${f.id}`; 
+    
+    // Atualiza as sugestões
+    atualizarSugestoesModal();
+    
     document.getElementById('modal-frase').classList.remove('hidden'); 
 }
 
@@ -191,20 +215,18 @@ async function salvarFrase() {
     const rawDoc = document.getElementById('inp-doc').value.trim();
     const rawConteudo = document.getElementById('inp-conteudo').value;
 
-    // --- VALIDAÇÃO DE CAMPOS OBRIGATÓRIOS (NOVO) ---
     if (!rawEmpresa || !rawMotivo || !rawDoc || !rawConteudo.trim()) {
         return Swal.fire({
             title: 'Campos Obrigatórios',
-            text: 'Por favor, preencha todos os campos: Empresa, Motivo, Documento e Conteúdo.',
+            text: 'Por favor, preencha todos os campos.',
             icon: 'warning',
             confirmButtonColor: '#3b82f6'
         });
     }
-    // -----------------------------------------------
     
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
     
-    // Validação de Duplicidade
+    // Validação de Duplicidade (Conteúdo)
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
     const duplicada = cacheFrases.some(f => {
         if (id && f.id == id) return false; 
@@ -220,6 +242,8 @@ async function salvarFrase() {
         });
     }
 
+    // Padronização dos Campos de Metadados (Empresa, Motivo, Doc)
+    // Usa 'titulo' para Capitalize Each Word (ex: "gupy" -> "Gupy")
     const dados = { 
         empresa: formatarTextoBonito(rawEmpresa, 'titulo'), 
         motivo: formatarTextoBonito(rawMotivo, 'titulo'), 
@@ -231,10 +255,9 @@ async function salvarFrase() {
     try { 
         if(id) { 
             await _supabase.from('frases').update(dados).eq('id', id); 
-            registrarLog('EDITAR', id); // Envia apenas ID, banco gera data
+            registrarLog('EDITAR', id); 
         } else { 
             const { data } = await _supabase.from('frases').insert([dados]).select(); 
-            // Se conseguir pegar o ID do novo, registra
             if(data && data[0]) registrarLog('CRIAR', data[0].id);
             else registrarLog('CRIAR', 'Nova frase');
         } 
