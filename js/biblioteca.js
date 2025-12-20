@@ -5,19 +5,47 @@ let cacheFrases = [];
 async function carregarFrases() {
     try {
         const container = document.getElementById('grid-frases');
-        if(container) container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando biblioteca...</div>';
+        if(container) container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando sua biblioteca personalizada...</div>';
 
-        const { data, error } = await _supabase
+        // 1. Busca TODAS as frases (Dados Globais)
+        const { data: frasesGlobais, error: erroFrases } = await _supabase
             .from('frases')
-            .select('*')
-            .order('usos', {ascending: false}); 
+            .select('*');
         
-        if (error) throw error;
+        if (erroFrases) throw erroFrases;
 
-        cacheFrases = (data || []).map(f => ({
-            ...f, 
+        // 2. Busca MEUS USOS pessoais (Dados Pessoais)
+        let meusUsosMap = {};
+        if (usuarioLogado) {
+            const { data: meusStats, error: erroStats } = await _supabase
+                .from('user_frase_stats')
+                .select('frase_id, qtd_uso')
+                .eq('username', usuarioLogado.username);
+            
+            if (!erroStats && meusStats) {
+                // Cria um mapa rápido: { ID_FRASE: QTD_USO }
+                meusStats.forEach(stat => {
+                    meusUsosMap[stat.frase_id] = stat.qtd_uso;
+                });
+            }
+        }
+
+        // 3. Mescla e Ordena (A Mágica acontece aqui)
+        cacheFrases = (frasesGlobais || []).map(f => ({
+            ...f,
+            meus_usos: meusUsosMap[f.id] || 0, // Se não tiver uso pessoal, é 0
             _busca: normalizar(f.conteudo + f.empresa + f.motivo + f.documento)
         }));
+
+        // ORDENAÇÃO INTELIGENTE:
+        // 1º: O que EU mais uso.
+        // 2º: O que a EMPRESA mais usa (Desempate).
+        cacheFrases.sort((a, b) => {
+            if (b.meus_usos !== a.meus_usos) {
+                return b.meus_usos - a.meus_usos; // Prioridade pessoal
+            }
+            return (b.usos || 0) - (a.usos || 0); // Critério global
+        });
         
         aplicarFiltros('inicio');
     } catch (e) {
@@ -34,16 +62,47 @@ async function copiarTexto(id) {
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
+        // Log de Segurança
         registrarLog('COPIAR', String(id)); 
 
-        const novoUso = (f.usos || 0) + 1;
-        const agora = new Date().toISOString();
-
-        await _supabase.from('frases').update({ usos: novoUso, ultimo_uso: agora }).eq('id', id);
+        // ATUALIZAÇÃO DUPLA (Global + Pessoal)
         
-        f.usos = novoUso;
+        // 1. Atualiza Global (Para o Dashboard do Admin)
+        const novoUsoGlobal = (f.usos || 0) + 1;
+        const agora = new Date().toISOString();
+        // Dispara e esquece (não espera await para ser rápido na UI)
+        _supabase.from('frases').update({ usos: novoUsoGlobal, ultimo_uso: agora }).eq('id', id).then();
+
+        // 2. Atualiza Pessoal (Tabela Nova)
+        // Precisamos verificar se já existe registro ou criar um novo
+        const { data: statsExistente } = await _supabase
+            .from('user_frase_stats')
+            .select('*')
+            .eq('username', usuarioLogado.username)
+            .eq('frase_id', id)
+            .single();
+
+        let novoUsoPessoal = 1;
+
+        if (statsExistente) {
+            novoUsoPessoal = statsExistente.qtd_uso + 1;
+            await _supabase
+                .from('user_frase_stats')
+                .update({ qtd_uso: novoUsoPessoal, ultimo_uso: agora })
+                .eq('id', statsExistente.id);
+        } else {
+            await _supabase
+                .from('user_frase_stats')
+                .insert([{ username: usuarioLogado.username, frase_id: id, qtd_uso: 1 }]);
+        }
+        
+        // Atualiza Cache Local e UI imediatamente
+        f.usos = novoUsoGlobal;     // Mantemos o global no objeto
+        f.meus_usos = novoUsoPessoal; // Atualizamos o pessoal
+
         const elContador = document.querySelector(`#card-frase-${id} .contador-usos`);
-        if(elContador) elContador.innerHTML = `<i class="fas fa-history mr-1"></i>${novoUso} usos`;
+        // Mostra visualmente o contador pessoal para o usuário sentir a personalização
+        if(elContador) elContador.innerHTML = `<i class="fas fa-user-check mr-1"></i>${novoUsoPessoal} vezes usado por mim`;
     }); 
 }
 
@@ -80,12 +139,12 @@ function aplicarFiltros(origem) {
     let listaFinal;
 
     if (!temFiltro) {
-        listaFinal = filtrados.slice(0, 4);
+        listaFinal = filtrados.slice(0, 4); // Top 4 Personalizados
     } else {
         listaFinal = filtrados;
     }
 
-    renderizarBiblioteca(listaFinal); 
+    renderizarBiblioteca(listaFinal, !temFiltro); 
 }
 
 function updateSelect(id, list, key, label, currentValue) { 
@@ -96,7 +155,7 @@ function updateSelect(id, list, key, label, currentValue) {
     if (uniq.includes(currentValue)) sel.value = currentValue; else sel.value = "";
 }
 
-function renderizarBiblioteca(lista) { 
+function renderizarBiblioteca(lista, isTop4) { 
     const grid = document.getElementById('grid-frases'); 
     if(!grid) return;
     
@@ -106,6 +165,18 @@ function renderizarBiblioteca(lista) {
         const idSafe = f.id;
         const objSafe = JSON.stringify(f).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         
+        // Lógica visual do contador:
+        // Se eu já usei, mostra "X usos meus". Se nunca usei, mostra "X usos globais" (para incentivo)
+        let textoContador;
+        let iconeContador;
+        if (f.meus_usos > 0) {
+            textoContador = `${f.meus_usos} vezes usado por mim`;
+            iconeContador = "fa-user-check text-blue-500";
+        } else {
+            textoContador = `${f.usos || 0} usos na empresa`;
+            iconeContador = "fa-globe text-slate-400";
+        }
+
         return `
         <div id="card-frase-${idSafe}" class="flex flex-col bg-white rounded-2xl shadow-sm border border-slate-200 hover:shadow-lg transition-all duration-300 group overflow-hidden animate-fade-in">
             <div class="px-5 pt-4 pb-3 border-b border-slate-50 bg-slate-50/50 flex justify-between items-start">
@@ -125,8 +196,8 @@ function renderizarBiblioteca(lista) {
             </div>
             <div class="px-5 py-4 flex-grow"><p class="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed select-all">${f.conteudo}</p></div>
             <div class="px-5 py-2 bg-slate-50 border-t border-slate-100 flex justify-start items-center">
-                <span class="contador-usos text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                    <i class="fas fa-history mr-1"></i>${f.usos || 0} usos
+                <span class="contador-usos text-[9px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                    <i class="fas ${iconeContador}"></i> ${textoContador}
                 </span>
             </div>
         </div>`;
@@ -160,16 +231,13 @@ function padronizarFraseInteligente(texto) {
 
 // --- CRUD ---
 
-// Função Nova: Popula as Datalists (Sugestões)
 function atualizarSugestoesModal() {
     const preencher = (idLista, chave) => {
         const lista = document.getElementById(idLista);
         if(!lista) return;
-        // Pega valores únicos, remove vazios e ordena
         const valores = [...new Set(cacheFrases.map(f => f[chave]))].filter(Boolean).sort();
         lista.innerHTML = valores.map(v => `<option value="${v}">`).join('');
     };
-
     preencher('list-empresas', 'empresa');
     preencher('list-motivos', 'motivo');
     preencher('list-docs', 'documento');
@@ -181,12 +249,8 @@ function abrirModalFrase() {
     document.getElementById('inp-empresa').value=''; 
     document.getElementById('inp-motivo').value=''; 
     document.getElementById('inp-doc').value=''; 
-    
     document.getElementById('modal-title').innerHTML='Nova Frase'; 
-    
-    // Atualiza as sugestões antes de abrir
     atualizarSugestoesModal();
-    
     document.getElementById('modal-frase').classList.remove('hidden'); 
 }
 
@@ -197,36 +261,23 @@ function editarFrase(f) {
     document.getElementById('inp-motivo').value = f.motivo; 
     document.getElementById('inp-doc').value = f.documento; 
     document.getElementById('inp-conteudo').value = f.conteudo; 
-    
     document.getElementById('modal-title').innerHTML = `Editar #${f.id}`; 
-    
-    // Atualiza as sugestões
     atualizarSugestoesModal();
-    
     document.getElementById('modal-frase').classList.remove('hidden'); 
 }
 
 async function salvarFrase() { 
     const id = document.getElementById('id-frase').value; 
-    
-    // Captura os valores brutos
     const rawEmpresa = document.getElementById('inp-empresa').value.trim();
     const rawMotivo = document.getElementById('inp-motivo').value.trim();
     const rawDoc = document.getElementById('inp-doc').value.trim();
     const rawConteudo = document.getElementById('inp-conteudo').value;
 
     if (!rawEmpresa || !rawMotivo || !rawDoc || !rawConteudo.trim()) {
-        return Swal.fire({
-            title: 'Campos Obrigatórios',
-            text: 'Por favor, preencha todos os campos.',
-            icon: 'warning',
-            confirmButtonColor: '#3b82f6'
-        });
+        return Swal.fire({title: 'Campos Obrigatórios', text: 'Por favor, preencha todos os campos.', icon: 'warning', confirmButtonColor: '#3b82f6'});
     }
     
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
-    
-    // Validação de Duplicidade (Conteúdo)
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
     const duplicada = cacheFrases.some(f => {
         if (id && f.id == id) return false; 
@@ -235,15 +286,9 @@ async function salvarFrase() {
     });
 
     if (duplicada) {
-        return Swal.fire({
-            title: 'Frase Duplicada',
-            text: 'Esta frase já existe na biblioteca.',
-            icon: 'warning'
-        });
+        return Swal.fire({title: 'Frase Duplicada', text: 'Esta frase já existe na biblioteca.', icon: 'warning'});
     }
 
-    // Padronização dos Campos de Metadados (Empresa, Motivo, Doc)
-    // Usa 'titulo' para Capitalize Each Word (ex: "gupy" -> "Gupy")
     const dados = { 
         empresa: formatarTextoBonito(rawEmpresa, 'titulo'), 
         motivo: formatarTextoBonito(rawMotivo, 'titulo'), 
