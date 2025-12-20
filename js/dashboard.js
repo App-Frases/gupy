@@ -3,7 +3,6 @@
 let dashboardSubscription = null;
 
 async function carregarDashboard() {
-    // 1. Segurança
     const painel = document.getElementById('painel-dashboard');
     if (!usuarioLogado || usuarioLogado.perfil !== 'admin') {
         if(painel) painel.classList.add('hidden');
@@ -14,8 +13,19 @@ async function carregarDashboard() {
     try {
         exibirCarregando();
         
-        // --- CONSULTAS DIRETA AO BANCO (Super Rápido) ---
+        // 1. BUSCAR NOMES REAIS (O Segredo para não mostrar IDs)
+        // Buscamos todos os usuários para traduzir "username" -> "Nome Completo"
+        const { data: usuariosData } = await _supabase.from('usuarios').select('username, nome');
+        
+        // Cria um mapa rápido: { 'joao.silva': 'João Silva', 'maria': 'Maria Souza' }
+        const mapaNomes = {};
+        if (usuariosData) {
+            usuariosData.forEach(u => {
+                mapaNomes[u.username] = u.nome || formatarNomeUser(u.username);
+            });
+        }
 
+        // 2. CONSULTAS AO BANCO
         // A. Top 5 Frases Mais Usadas
         const { data: topFrases } = await _supabase
             .from('frases')
@@ -23,11 +33,11 @@ async function carregarDashboard() {
             .order('usos', { ascending: false })
             .limit(5);
 
-        // B. Top 5 Menos Usadas (Com filtro >= 10 usos)
+        // B. Top 5 Menos Usadas (>= 10 usos)
         const { data: lowFrases } = await _supabase
             .from('frases')
             .select('*')
-            .gte('usos', 10) // Greater Than or Equal (Maior ou igual a 10)
+            .gte('usos', 10) 
             .order('usos', { ascending: true })
             .limit(5);
 
@@ -38,24 +48,23 @@ async function carregarDashboard() {
         const { data: semUso90d } = await _supabase
             .from('frases')
             .select('*')
-            // lt = Less Than (Menor que data de corte) OU is = null (nunca usadas)
             .or(`ultimo_uso.lt.${dataCorte.toISOString()},ultimo_uso.is.null`)
-            .order('ultimo_uso', { ascending: true }); // As mais antigas primeiro
+            .order('ultimo_uso', { ascending: true });
 
-        // D. Ranking de Usuários (Ainda precisamos dos logs para isso)
-        // Buscamos apenas os logs necessários
+        // D. Ranking de Usuários (Logs)
         const { data: logsUsuarios } = await _supabase
             .from('logs')
             .select('usuario');
 
-        // E. Totalizadores Gerais
+        // E. Totalizadores
         const { count: totalFrases } = await _supabase.from('frases').select('*', { count: 'exact', head: true });
         
-        // --- PROCESSAMENTO (Apenas Usuários agora) ---
-        const rankingUsuarios = processarRankingUsuarios(logsUsuarios);
+        // 3. PROCESSAMENTO COM NOMES REAIS
+        // Passamos o mapaNomes para a função de processamento
+        const rankingUsuarios = processarRankingUsuarios(logsUsuarios, mapaNomes);
         const totalUsosGerais = logsUsuarios ? logsUsuarios.length : 0;
 
-        // --- RENDERIZAÇÃO ---
+        // 4. RENDERIZAÇÃO
         renderizarKPIs({ totalUsos: totalUsosGerais, totalFrases: totalFrases || 0, totalInativas: semUso90d?.length || 0, totalUsers: rankingUsuarios.all.length });
         
         renderizarTabelaUsuarios(rankingUsuarios.top5, 'lista-top-users', 'green');
@@ -63,7 +72,7 @@ async function carregarDashboard() {
         
         renderizarTopFrases(topFrases || [], 'lista-top-frases');
         renderizarLowFrases(lowFrases || [], 'lista-low-frases');
-        renderizarFrasesSemUso(semUso90d || []);
+        renderizarFrasesSemUso(semUso90d || [], mapaNomes); // Passamos os nomes aqui também
 
         // Realtime
         if (!dashboardSubscription) {
@@ -77,8 +86,8 @@ async function carregarDashboard() {
     }
 }
 
-// Helper: Processa logs APENAS para ranking de equipe
-function processarRankingUsuarios(logs) {
+// Helper atualizado para aceitar o mapa de nomes
+function processarRankingUsuarios(logs, mapaNomes) {
     if(!logs) return { top5: [], bottom5: [], all: [] };
     
     const contagem = {};
@@ -86,10 +95,10 @@ function processarRankingUsuarios(logs) {
         if(l.usuario) contagem[l.usuario] = (contagem[l.usuario] || 0) + 1;
     });
 
-    // Transforma em array e ordena
     const arrayUsers = Object.entries(contagem).map(([user, qtd]) => ({
         username: user,
-        nome: formatarNomeUser(user), // Função auxiliar simples
+        // AQUI ESTÁ A MÁGICA: Tenta pegar o nome real, se não tiver, usa o user formatado
+        nome: mapaNomes[user] || formatarNomeUser(user), 
         qtd: qtd
     }));
 
@@ -109,7 +118,7 @@ function formatarNomeUser(u) {
 // --- RENDERIZADORES ---
 
 function exibirCarregando() {
-    const loading = '<tr><td colspan="4" class="p-4 text-center text-slate-400 animate-pulse text-xs">Carregando dados do servidor...</td></tr>';
+    const loading = '<tr><td colspan="4" class="p-4 text-center text-slate-400 animate-pulse text-xs">Carregando dados...</td></tr>';
     ['lista-top-users', 'lista-bottom-users', 'lista-top-frases', 'lista-low-frases', 'lista-frases-sem-uso'].forEach(id => {
         const el = document.getElementById(id); if(el) el.innerHTML = loading;
     });
@@ -203,7 +212,7 @@ function renderizarLowFrases(lista, elementId) {
         </tr>`).join('');
 }
 
-function renderizarFrasesSemUso(lista) {
+function renderizarFrasesSemUso(lista, mapaNomes) {
     const tbody = document.getElementById('lista-frases-sem-uso');
     if (!tbody) return;
     if (!lista.length) { tbody.innerHTML = '<tr><td class="p-6 text-center text-green-600 bg-green-50/50 rounded-lg text-sm font-bold"><i class="fas fa-check-circle mr-2"></i>Tudo limpo!</td></tr>'; return; }
@@ -215,25 +224,34 @@ function renderizarFrasesSemUso(lista) {
             diasSemUso = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + " dias";
         }
 
+        // Descobre o nome do criador
+        const nomeCriador = mapaNomes[f.revisado_por] || f.revisado_por || 'Sistema';
+
         return `
         <tr class="border-b border-slate-50 hover:bg-red-50 transition group">
+            <td class="px-5 py-3 align-top w-16">
+                <span class="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 block text-center">#${f.id}</span>
+            </td>
             <td class="px-5 py-3">
-                <div class="flex justify-between items-center gap-4">
-                    <div class="flex-1 min-w-0">
-                        <div class="flex gap-2 items-center mb-1">
-                            <span class="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">#${f.id}</span>
-                            <span class="text-[10px] font-bold text-slate-600 uppercase truncate">${f.motivo || 'Sem Motivo'}</span>
-                        </div>
-                        <p class="text-xs text-slate-500 line-clamp-1">${f.conteudo}</p>
-                    </div>
-                    <div class="text-right shrink-0">
-                        <div class="text-[9px] font-bold text-red-400 uppercase tracking-wide">Inativa há</div>
-                        <div class="text-sm font-black text-slate-700 leading-tight">${diasSemUso}</div>
-                    </div>
-                    <div class="opacity-0 group-hover:opacity-100 transition shrink-0">
-                         <button onclick="deletarFraseDashboard(${f.id})" class="text-red-400 hover:text-white hover:bg-red-500 border border-red-200 hover:border-red-500 w-8 h-8 rounded-full flex items-center justify-center transition" title="Excluir"><i class="fas fa-trash-alt text-xs"></i></button>
-                    </div>
+                <div class="flex-1 min-w-0">
+                    <span class="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">${f.motivo || 'Sem Motivo'}</span>
+                    <p class="text-xs text-slate-500 line-clamp-2" title="${f.conteudo}">${f.conteudo}</p>
                 </div>
+            </td>
+            <td class="px-5 py-3 align-top">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-500">
+                        ${nomeCriador.charAt(0).toUpperCase()}
+                    </div>
+                    <span class="text-xs font-bold text-slate-600 truncate max-w-[80px]" title="${f.revisado_por}">
+                        ${nomeCriador}
+                    </span>
+                </div>
+            </td>
+            <td class="px-5 py-3 align-top text-right">
+                <div class="text-[9px] font-bold text-red-400 uppercase tracking-wide">Inativa há</div>
+                <div class="text-sm font-black text-slate-700 leading-tight mb-1">${diasSemUso}</div>
+                <button onclick="deletarFraseDashboard(${f.id})" class="text-red-400 hover:text-white hover:bg-red-500 border border-red-200 hover:border-red-500 text-[10px] px-2 py-0.5 rounded transition">Excluir</button>
             </td>
         </tr>`;
     }).join('');
