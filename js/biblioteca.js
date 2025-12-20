@@ -5,9 +5,8 @@ let cacheFrases = [];
 async function carregarFrases() {
     try {
         const container = document.getElementById('grid-frases');
-        container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando biblioteca...</div>';
+        if(container) container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando biblioteca...</div>';
 
-        // Busca todas as frases ordenadas por uso (Decrescente)
         const { data, error } = await _supabase
             .from('frases')
             .select('*')
@@ -15,7 +14,6 @@ async function carregarFrases() {
         
         if (error) throw error;
 
-        // Cria cache para pesquisa rápida local
         cacheFrases = (data || []).map(f => ({
             ...f, 
             _busca: normalizar(f.conteudo + f.empresa + f.motivo + f.documento)
@@ -23,7 +21,7 @@ async function carregarFrases() {
         
         aplicarFiltros('inicio');
     } catch (e) {
-        console.error("Erro ao carregar frases:", e);
+        console.error("Erro:", e);
         Swal.fire('Erro', 'Falha ao carregar biblioteca.', 'error');
     }
 }
@@ -33,11 +31,9 @@ async function copiarTexto(id) {
     if(!f) return;
 
     navigator.clipboard.writeText(f.conteudo).then(async () => { 
-        // Feedback Visual
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
-        // Log
         _supabase.from('logs').insert([{
             usuario: usuarioLogado.username, 
             acao: 'COPIAR_RANK', 
@@ -45,29 +41,20 @@ async function copiarTexto(id) {
             data_hora: new Date().toISOString()
         }]).then(() => {}); 
 
-        // Atualiza Banco
         const novoUso = (f.usos || 0) + 1;
         const agora = new Date().toISOString();
 
-        await _supabase
-            .from('frases')
-            .update({ usos: novoUso, ultimo_uso: agora })
-            .eq('id', id);
+        await _supabase.from('frases').update({ usos: novoUso, ultimo_uso: agora }).eq('id', id);
         
-        // Atualiza Cache Local e UI
         f.usos = novoUso;
         const elContador = document.querySelector(`#card-frase-${id} .contador-usos`);
         if(elContador) elContador.innerHTML = `<i class="fas fa-history mr-1"></i>${novoUso} usos`;
-        
-        // Opcional: Se estiver no modo "Top 4", talvez queira reordenar, 
-        // mas é melhor não mexer na tela enquanto o usuário interage.
     }); 
 }
 
 function aplicarFiltros(origem) {
     const elSearch = document.getElementById('global-search');
     const termo = elSearch ? normalizar(elSearch.value) : '';
-    
     const elEmpresa = document.getElementById('filtro-empresa');
     const elMotivo = document.getElementById('filtro-motivo');
     const elDoc = document.getElementById('filtro-doc');
@@ -76,16 +63,11 @@ function aplicarFiltros(origem) {
     const valMotivo = elMotivo.value;
     const valDoc = elDoc.value;
 
-    // Verifica se existe ALGUM filtro ativo
-    const temFiltroAtivo = termo !== '' || valEmpresa !== '' || valMotivo !== '' || valDoc !== '';
-
+    const temFiltro = termo !== '' || valEmpresa !== '' || valMotivo !== '' || valDoc !== '';
     let base = cacheFrases;
 
-    // 1. Filtragem por Texto
     if (termo) base = base.filter(f => f._busca.includes(termo));
 
-    // 2. Lógica para popular os Selects (Dropdowns) dinamicamente
-    // (Mantém a lógica inteligente de mostrar apenas opções válidas combinadas)
     const optsEmpresa = base.filter(f => (valMotivo ? f.motivo === valMotivo : true) && (valDoc ? f.documento === valDoc : true));
     const optsMotivo = base.filter(f => (valEmpresa ? f.empresa === valEmpresa : true) && (valDoc ? f.documento === valDoc : true));
     const optsDoc = base.filter(f => (valEmpresa ? f.empresa === valEmpresa : true) && (valMotivo ? f.motivo === valMotivo : true));
@@ -94,34 +76,29 @@ function aplicarFiltros(origem) {
     updateSelect('filtro-motivo', optsMotivo, 'motivo', '🎯 Motivos', valMotivo);
     updateSelect('filtro-doc', optsDoc, 'documento', '📄 Docs', valDoc);
 
-    // 3. Filtragem Final pelos Selects
     const filtrados = base.filter(f => 
         (valEmpresa ? f.empresa === valEmpresa : true) && 
         (valMotivo ? f.motivo === valMotivo : true) && 
         (valDoc ? f.documento === valDoc : true)
     );
     
-    // --- LÓGICA DE EXIBIÇÃO ---
     let listaFinal;
-    let mensagemTitulo = "";
+    let tituloHtml = "";
 
-    if (!temFiltroAtivo) {
-        // MODO PADRÃO: Mostra apenas Top 4
+    if (!temFiltro) {
         listaFinal = filtrados.slice(0, 4);
-        mensagemTitulo = `<div class="col-span-full mb-2 flex items-center gap-2"><i class="fas fa-fire text-orange-500"></i> <span class="font-bold text-slate-500 text-xs uppercase tracking-wider">Top 4 Mais Usadas</span></div>`;
+        tituloHtml = `<div class="col-span-full mb-2 flex items-center gap-2"><i class="fas fa-fire text-orange-500"></i> <span class="font-bold text-slate-500 text-xs uppercase tracking-wider">Top 4 Mais Usadas</span></div>`;
     } else {
-        // MODO PESQUISA: Mostra Tudo
         listaFinal = filtrados;
-        mensagemTitulo = `<div class="col-span-full mb-2 flex items-center gap-2"><i class="fas fa-search text-blue-500"></i> <span class="font-bold text-slate-500 text-xs uppercase tracking-wider">Resultados da Busca (${listaFinal.length})</span></div>`;
+        tituloHtml = `<div class="col-span-full mb-2 flex items-center gap-2"><i class="fas fa-search text-blue-500"></i> <span class="font-bold text-slate-500 text-xs uppercase tracking-wider">Resultados (${listaFinal.length})</span></div>`;
     }
 
-    renderizarBiblioteca(listaFinal, mensagemTitulo); 
+    renderizarBiblioteca(listaFinal, tituloHtml); 
 }
 
 function updateSelect(id, list, key, label, currentValue) { 
     const sel = document.getElementById(id); 
-    if(document.activeElement === sel) return; // Não atualiza se o usuário estiver mexendo nele
-    
+    if(document.activeElement === sel) return; 
     const uniq = [...new Set(list.map(i=>i[key]).filter(Boolean))].sort(); 
     sel.innerHTML = `<option value="">${label}</option>` + uniq.map(u=>`<option value="${u}">${u}</option>`).join(''); 
     if (uniq.includes(currentValue)) sel.value = currentValue; else sel.value = "";
@@ -131,12 +108,9 @@ function renderizarBiblioteca(lista, tituloHtml) {
     const grid = document.getElementById('grid-frases'); 
     if(!grid) return;
     
-    if(!lista.length) { 
-        grid.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 font-bold bg-white rounded-xl border border-slate-100 shadow-sm">Nenhum resultado encontrado para esta pesquisa.</div>'; 
-        return; 
-    } 
+    if(!lista.length) { grid.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 font-bold bg-white rounded-xl border border-slate-100">Nenhum resultado.</div>'; return; } 
     
-    const cardsHtml = lista.map(f => {
+    const cards = lista.map(f => {
         const idSafe = f.id;
         const objSafe = JSON.stringify(f).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         
@@ -152,10 +126,9 @@ function renderizarBiblioteca(lista, tituloHtml) {
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
                     <button onclick="copiarTexto(${idSafe})" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5" title="Copiar"><i class="far fa-copy"></i> Copiar</button>
-                    ${usuarioLogado.perfil === 'admin' ? `
-                    <button onclick='editarFrase(${objSafe})' class="bg-white border border-yellow-200 text-yellow-600 hover:bg-yellow-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm"><i class="fas fa-pen"></i></button>
-                    <button onclick="deletarFraseBiblioteca(${idSafe})" class="bg-white border border-red-200 text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm"><i class="fas fa-trash-alt"></i></button>
-                    ` : ''}
+                    
+                    <button onclick='editarFrase(${objSafe})' class="bg-white border border-yellow-200 text-yellow-600 hover:bg-yellow-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Editar"><i class="fas fa-pen"></i></button>
+                    <button onclick="deletarFraseBiblioteca(${idSafe})" class="bg-white border border-red-200 text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Excluir"><i class="fas fa-trash-alt"></i></button>
                 </div>
             </div>
             <div class="px-5 py-4 flex-grow"><p class="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed select-all">${f.conteudo}</p></div>
@@ -167,8 +140,7 @@ function renderizarBiblioteca(lista, tituloHtml) {
         </div>`;
     }).join('');
 
-    // Adiciona o título (Top 4 ou Resultados) antes dos cards
-    grid.innerHTML = tituloHtml + cardsHtml;
+    grid.innerHTML = tituloHtml + cards;
 }
 
 function limparFiltros() { 
@@ -178,7 +150,8 @@ function limparFiltros() {
     aplicarFiltros('inicio'); 
 }
 
-// --- CRUD (Mantido) ---
+// --- CRUD ---
+
 function abrirModalFrase() { 
     document.getElementById('id-frase').value=''; 
     document.getElementById('inp-conteudo').value=''; 
@@ -208,6 +181,28 @@ async function salvarFrase() {
     
     if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
 
+    // --- NOVA VALIDAÇÃO DE DUPLICIDADE (IGNORANDO PONTUAÇÃO) ---
+    // Remove tudo que não é letra ou número para comparar (ex: "olá, mundo!" vira "olamundo")
+    // A função 'normalizar' remove acentos e 'replace' remove símbolos
+    const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
+
+    const duplicada = cacheFrases.some(f => {
+        // Se estiver editando, ignora a si mesmo
+        if (id && f.id == id) return false;
+        
+        const bancoPuro = normalizar(f.conteudo).replace(/[^\w]/g, '');
+        return inputPuro === bancoPuro;
+    });
+
+    if (duplicada) {
+        return Swal.fire({
+            title: 'Frase Duplicada',
+            text: 'Já existe uma frase com este conteúdo na biblioteca (mesmo com pontuação diferente).',
+            icon: 'warning'
+        });
+    }
+    // ------------------------------------------------------------
+
     const dados = { 
         empresa: formatarTextoBonito(document.getElementById('inp-empresa').value, 'titulo'), 
         motivo: formatarTextoBonito(document.getElementById('inp-motivo').value, 'titulo'), 
@@ -224,12 +219,14 @@ async function salvarFrase() {
             await _supabase.from('frases').insert([dados]); 
             registrarLog('CRIAR', `Nova frase`); 
         } 
-        fecharModalFrase(); carregarFrases(); Swal.fire('Salvo!', '', 'success'); 
+        document.getElementById('modal-frase').classList.add('hidden'); 
+        carregarFrases(); 
+        Swal.fire('Salvo!', '', 'success'); 
     } catch(e) { Swal.fire('Erro', 'Falha ao salvar', 'error'); } 
 }
 
 async function deletarFraseBiblioteca(id) {
-    if((await Swal.fire({title:'Excluir?', text: "Irreversível!", icon: 'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Sim'})).isConfirmed) {
+    if((await Swal.fire({title:'Excluir?', text: "Esta ação não pode ser desfeita.", icon: 'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Sim, excluir'})).isConfirmed) {
         await _supabase.from('frases').delete().eq('id', id);
         registrarLog('EXCLUIR', `Apagou frase #${id}`);
         carregarFrases();
