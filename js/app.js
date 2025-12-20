@@ -125,31 +125,32 @@ function navegar(pagina) {
     const btnAtivo = document.getElementById(`menu-${pagina}`);
     if(btnAtivo) btnAtivo.classList.add('active-nav');
     
-    // --- LÓGICA DE FILTROS CORRIGIDA ---
-    // A barra de filtros (selects) só aparece na BIBLIOTECA.
-    // A barra de pesquisa (input) fica no header e funciona para todos.
-    const filterBar = document.getElementById('filter-bar');
-    if(filterBar) {
-        if (pagina === 'biblioteca') {
-            filterBar.classList.remove('hidden');
-        } else {
-            filterBar.classList.add('hidden');
-        }
-    }
-    
-    // Reset dos botões de ação
+    // --- CONTROLE DOS BOTÕES GLOBAIS (TOPO) ---
+    // Reseta todos
     const btns = ['btn-add-global', 'btn-add-member', 'btn-refresh-logs'];
     btns.forEach(b => {
         const el = document.getElementById(b);
         if(el) { el.classList.add('hidden'); el.classList.remove('flex'); }
     });
     
-    // Ações específicas por página
+    // Mostra o específico da página
     if (pagina === 'biblioteca') {
         const btn = document.getElementById('btn-add-global');
         if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); } 
+        
+        // Botão de Filtro (só existe na biblioteca)
+        const btnFilter = document.getElementById('btn-toggle-filters');
+        if(btnFilter) { btnFilter.classList.remove('hidden'); btnFilter.classList.add('flex'); }
+        
         carregarFrases();
-    } else if (pagina === 'equipe') {
+    } else {
+        // Esconde botão de filtro nas outras páginas
+        const btnFilter = document.getElementById('btn-toggle-filters');
+        if(btnFilter) { btnFilter.classList.add('hidden'); btnFilter.classList.remove('flex'); }
+        document.getElementById('filter-panel').classList.add('hidden'); // Garante que fecha o painel
+    }
+
+    if (pagina === 'equipe') {
         const btn = document.getElementById('btn-add-member');
         if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); }
         carregarEquipe();
@@ -165,7 +166,6 @@ function navegar(pagina) {
     if(inputBusca) { 
         inputBusca.value = ''; 
         inputBusca.disabled = (pagina === 'dashboard'); 
-        // Placeholder dinâmico
         if(pagina === 'biblioteca') inputBusca.placeholder = "🔎 Pesquisar frases...";
         else if(pagina === 'equipe') inputBusca.placeholder = "🔎 Buscar membro...";
         else if(pagina === 'logs') inputBusca.placeholder = "🔎 Filtrar histórico...";
@@ -173,12 +173,24 @@ function navegar(pagina) {
     }
 }
 
+// --- FUNÇÃO DO NOVO BOTÃO DE FILTRO ---
+function toggleFiltros() {
+    const panel = document.getElementById('filter-panel');
+    const btn = document.getElementById('btn-toggle-filters');
+    
+    if(panel.classList.contains('hidden')) {
+        panel.classList.remove('hidden');
+        btn.classList.add('bg-blue-50', 'text-blue-600', 'border-blue-200'); // Estilo ativo
+    } else {
+        panel.classList.add('hidden');
+        btn.classList.remove('bg-blue-50', 'text-blue-600', 'border-blue-200'); // Estilo inativo
+    }
+}
+
 function debounceBusca() { 
     clearTimeout(debounceTimer); 
     debounceTimer = setTimeout(() => {
         const termo = document.getElementById('global-search').value.toLowerCase();
-        
-        // Roteamento da busca para a função correta
         if (abaAtiva === 'biblioteca' && typeof aplicarFiltros === 'function') aplicarFiltros();
         if (abaAtiva === 'equipe' && typeof filtrarEquipe === 'function') filtrarEquipe(termo);
         if (abaAtiva === 'logs' && typeof filtrarLogs === 'function') filtrarLogs(termo);
