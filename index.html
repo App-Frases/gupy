@@ -22,6 +22,7 @@
         .nav-item:hover { background-color: #334155; color: white; }
         .active-nav { background-color: #2563eb; color: white; }
         
+        /* Scrollbars Personalizadas */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -99,24 +100,41 @@
     <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
         <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
             <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
-                <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calendar-alt text-blue-400"></i> Calculadora de Datas</h3>
-                <button onclick="fecharModalIdade()" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md"><i class="fas fa-times text-sm"></i></button>
+                <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2">
+                    <i class="fas fa-calendar-alt text-blue-400"></i> Calculadora de Datas
+                </h3>
+                <button onclick="fecharModalIdade()" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
             </div>
             <div class="p-6 space-y-6">
                 <div class="flex gap-4 items-end">
                     <div class="relative flex-1 group">
                         <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Insira uma Data</label>
                         <div class="relative">
-                            <input id="nasc-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularDatas()" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
+                            <input id="nasc-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularDatas()"
+                                class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
                             <i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg group-focus-within:text-blue-500 transition-colors"></i>
                         </div>
                     </div>
-                    <button onclick="calcularDatas()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">Calcular</button>
+                    <button onclick="calcularDatas()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">
+                        Calcular
+                    </button>
                 </div>
                 <div id="idade-resultado-box" class="hidden animate-fade-in space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span><span id="data-nasc-display" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span></div>
-                        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden group"><i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10 group-hover:scale-110 transition-transform"></i><span class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias Corridos</span><div class="flex items-baseline gap-1"><span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span><span class="text-sm font-bold text-blue-200">dias</span></div></div>
+                        <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span>
+                            <span id="data-nasc-display" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span>
+                        </div>
+                        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden group">
+                            <i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias Corridos</span>
+                            <div class="flex items-baseline gap-1">
+                                <span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span>
+                                <span class="text-sm font-bold text-blue-200">dias</span>
+                            </div>
+                        </div>
                     </div>
                     <div class="flex items-center gap-4 py-2"><div class="h-px bg-slate-200 flex-1"></div><span class="text-[10px] font-bold text-slate-400 uppercase">Tempo Detalhado</span><div class="h-px bg-slate-200 flex-1"></div></div>
                     <div class="grid grid-cols-4 gap-3">
@@ -212,6 +230,7 @@
         
         <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
             <div class="container mx-auto px-6 h-full flex items-center justify-between">
+                
                 <div class="flex items-center gap-8">
                     <div class="flex items-center gap-2 text-white cursor-pointer" onclick="navegar('biblioteca')">
                         <i class="fas fa-quote-right text-blue-500 text-xl"></i>
@@ -388,9 +407,9 @@
                                             <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Via Excel (.xlsx)</p>
                                         </div>
                                     </div>
-                                    <p class="text-xs text-slate-500 mb-4 leading-relaxed">Adicione centenas de frases de uma vez. Baixe o modelo para garantir a formatação correta.</p>
+                                    <p class="text-xs text-slate-500 mb-4 leading-relaxed">Adicione centenas de frases. Baixe o modelo para garantir a formatação.</p>
                                     <div class="flex flex-col gap-2">
-                                        <button onclick="baixarModeloExcel()" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 py-2 px-3 rounded-lg transition text-left flex items-center gap-2 border border-dashed border-emerald-200"><i class="fas fa-download"></i> Baixar Modelo (.xlsx)</button>
+                                        <button onclick="baixarModeloExcel()" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 py-2 px-3 rounded-lg transition text-left flex items-center gap-2 border border-dashed border-emerald-200"><i class="fas fa-download"></i> Baixar Modelo</button>
                                         <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-md shadow-emerald-200 transition transform active:scale-95 text-center flex justify-center items-center gap-2">
                                             <i class="fas fa-upload"></i> Selecionar Arquivo
                                             <input type="file" id="input-excel" accept=".xlsx, .xls" class="hidden" onchange="processarUploadExcel(this)">
@@ -407,11 +426,12 @@
                                             <i class="fas fa-database"></i>
                                         </div>
                                         <div>
-                                            <h3 class="font-extrabold text-slate-700 text-base">Backup & Restauração</h3>
-                                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Segurança dos Dados</p>
+                                            <h3 class="font-extrabold text-slate-700 text-base">Dados do Sistema</h3>
+                                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Manutenção</p>
                                         </div>
                                     </div>
-                                    <div class="grid grid-cols-2 gap-3">
+                                    
+                                    <div class="grid grid-cols-2 gap-3 mb-3">
                                         <button onclick="baixarBackup()" class="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition group/btn">
                                             <i class="fas fa-cloud-download-alt text-xl mb-1 text-slate-400 group-hover/btn:text-blue-500"></i>
                                             <span class="text-[10px] font-bold uppercase">Exportar</span>
@@ -422,8 +442,13 @@
                                             <input type="file" id="input-backup" accept=".json" class="hidden" onchange="restaurarBackup(this)">
                                         </label>
                                     </div>
+
+                                    <button onclick="removerDuplicadasEmMassa()" class="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 transition font-bold text-xs">
+                                        <i class="fas fa-broom"></i> Remover Frases Duplicadas
+                                    </button>
                                 </div>
                             </div>
+
                         </div>
                     </div>
                 </section>
