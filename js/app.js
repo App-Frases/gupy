@@ -101,11 +101,8 @@ async function atualizarSenhaPrimeiroAcesso() {
 
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
 
-// --- LOGGING AUTOMÁTICO (CORRIGIDO) ---
 async function registrarLog(acao, detalhe) { 
     if(usuarioLogado) {
-        // NÃO enviamos mais data_hora aqui. 
-        // O Supabase gera automaticamente com 'now()', garantindo a hora certa do servidor.
         await _supabase.from('logs').insert([{
             usuario: usuarioLogado.username, 
             acao: acao, 
@@ -128,15 +125,26 @@ function navegar(pagina) {
     const btnAtivo = document.getElementById(`menu-${pagina}`);
     if(btnAtivo) btnAtivo.classList.add('active-nav');
     
+    // --- LÓGICA DE FILTROS CORRIGIDA ---
+    // A barra de filtros (selects) só aparece na BIBLIOTECA.
+    // A barra de pesquisa (input) fica no header e funciona para todos.
     const filterBar = document.getElementById('filter-bar');
-    if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
+    if(filterBar) {
+        if (pagina === 'biblioteca') {
+            filterBar.classList.remove('hidden');
+        } else {
+            filterBar.classList.add('hidden');
+        }
+    }
     
+    // Reset dos botões de ação
     const btns = ['btn-add-global', 'btn-add-member', 'btn-refresh-logs'];
     btns.forEach(b => {
         const el = document.getElementById(b);
         if(el) { el.classList.add('hidden'); el.classList.remove('flex'); }
     });
     
+    // Ações específicas por página
     if (pagina === 'biblioteca') {
         const btn = document.getElementById('btn-add-global');
         if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); } 
@@ -154,13 +162,23 @@ function navegar(pagina) {
     }
 
     const inputBusca = document.getElementById('global-search');
-    if(inputBusca) { inputBusca.value = ''; inputBusca.disabled = (pagina === 'dashboard'); }
+    if(inputBusca) { 
+        inputBusca.value = ''; 
+        inputBusca.disabled = (pagina === 'dashboard'); 
+        // Placeholder dinâmico
+        if(pagina === 'biblioteca') inputBusca.placeholder = "🔎 Pesquisar frases...";
+        else if(pagina === 'equipe') inputBusca.placeholder = "🔎 Buscar membro...";
+        else if(pagina === 'logs') inputBusca.placeholder = "🔎 Filtrar histórico...";
+        else inputBusca.placeholder = "Pesquisar...";
+    }
 }
 
 function debounceBusca() { 
     clearTimeout(debounceTimer); 
     debounceTimer = setTimeout(() => {
         const termo = document.getElementById('global-search').value.toLowerCase();
+        
+        // Roteamento da busca para a função correta
         if (abaAtiva === 'biblioteca' && typeof aplicarFiltros === 'function') aplicarFiltros();
         if (abaAtiva === 'equipe' && typeof filtrarEquipe === 'function') filtrarEquipe(termo);
         if (abaAtiva === 'logs' && typeof filtrarLogs === 'function') filtrarLogs(termo);
@@ -220,7 +238,6 @@ function calcularDatas() {
     if (isNaN(dNasc.getTime())) return Swal.fire('Erro', 'Data inválida', 'error');
     if (dNasc > hoje) return Swal.fire('Erro', 'A data não pode ser futura', 'warning');
     
-    // Cálculo Matemático
     const diffTime = Math.abs(hoje - dNasc);
     const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
@@ -237,11 +254,9 @@ function calcularDatas() {
         meses += 12;
     }
     
-    // Calcula Semanas e Dias Finais
     const semanas = Math.floor(diasRestantes / 7);
     const diasFinais = diasRestantes % 7;
     
-    // Atualiza Visual
     document.getElementById('data-nasc-display').innerText = val;
     document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
     
@@ -259,7 +274,6 @@ function fecharModalIdade() { document.getElementById('modal-idade').classList.a
 function fecharModalFrase() { document.getElementById('modal-frase').classList.add('hidden'); }
 function fecharModalUsuario() { document.getElementById('modal-usuario').classList.add('hidden'); }
 
-// CHAT E OUTROS (Mantidos)
 async function carregarNomesChat() {
     const { data } = await _supabase.from('usuarios').select('username, nome');
     if(data) data.forEach(u => cacheNomesChat[u.username] = u.nome || u.username);
