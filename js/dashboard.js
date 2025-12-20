@@ -1,286 +1,288 @@
-<!DOCTYPE html>
-<html lang="pt-br">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gupy Frases - Sistema de Gestão</title>
-    
-    <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
-    
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+// Local: js/dashboard.js
 
-    <style>
-        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; }
-        .nav-item { transition: all 0.2s; border-radius: 0.5rem; }
-        .nav-item:hover { background-color: #334155; color: white; }
-        .active-nav { background-color: #2563eb; color: white; }
+let dashboardSubscription = null;
+
+async function carregarDashboard() {
+    const painel = document.getElementById('painel-dashboard');
+    if (!usuarioLogado || usuarioLogado.perfil !== 'admin') {
+        if(painel) painel.classList.add('hidden');
+        return; 
+    }
+    if(painel) painel.classList.remove('hidden');
+
+    try {
+        exibirCarregando();
         
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        .header-select {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-            background-position: right 0.5rem center;
-            background-repeat: no-repeat;
-            background-size: 1.2em 1.2em;
-            padding-right: 2rem;
-            -webkit-appearance: none; appearance: none;
+        // 1. BUSCAR NOMES REAIS
+        const { data: usuariosData } = await _supabase.from('usuarios').select('username, nome');
+        const mapaNomes = {};
+        if (usuariosData) {
+            usuariosData.forEach(u => {
+                mapaNomes[u.username] = u.nome || formatarNomeUser(u.username);
+            });
         }
-        
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-        
-        .chat-widget { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: bottom right; }
-        .chat-open { transform: scale(1); opacity: 1; pointer-events: auto; }
-        .chat-closed { transform: scale(0.9); opacity: 0; pointer-events: none; display: none; }
-        
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-    </style>
-</head>
-<body class="h-screen overflow-hidden text-slate-800 bg-slate-50 flex flex-col">
 
-    <div id="login-flow" class="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 absolute z-[100]">
-        <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md animate-fade-in">
-            <div class="text-center mb-8">
-                <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-quote-right text-3xl text-blue-600"></i></div>
-                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">Gupy Frases</h1><p class="text-base text-slate-500 mt-2 font-medium">Sistema Interno de Gestão</p>
-            </div>
-            <form onsubmit="event.preventDefault(); fazerLogin();">
-                <div class="mb-4"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Usuário</label><input type="text" id="login-user" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
-                <div class="mb-6"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha</label><input type="password" id="login-pass" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transform transition hover:-translate-y-1 text-lg">Acessar Sistema</button>
-            </form>
-            <div class="mt-8 text-center border-t border-slate-100 pt-4"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Desenvolvido por Pedro Gabriel</p></div>
-        </div>
-    </div>
+        // 2. CONSULTAS AO BANCO
+        
+        // A. Top 5 Frases Mais Usadas
+        const { data: topFrases } = await _supabase
+            .from('frases')
+            .select('*')
+            .order('usos', { ascending: false })
+            .limit(5);
 
-    <div id="first-access-modal" class="hidden fixed inset-0 bg-slate-900/80 z-[110] flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md text-center">
-            <h2 class="text-2xl font-bold mb-4">Nova Senha Necessária</h2>
-            <input type="password" id="new-password" placeholder="Nova Senha" class="w-full p-3 border rounded-xl mb-4">
-            <input type="password" id="confirm-password" placeholder="Confirmar Senha" class="w-full p-3 border rounded-xl mb-6">
-            <button onclick="atualizarSenhaPrimeiroAcesso()" class="w-full bg-yellow-500 text-white font-bold py-3 rounded-xl">Salvar e Entrar</button>
-        </div>
-    </div>
+        // B. Top 5 Menos Usadas (Lógica Corrigida)
+        // Buscamos um pouco mais (20) para poder filtrar as duplicadas no JS
+        const { data: lowCandidates } = await _supabase
+            .from('frases')
+            .select('*')
+            .gt('usos', 0) // MUDEI AQUI: > 0 (Pelo menos 1 uso). Se quiser >10, coloque 10.
+            .order('usos', { ascending: true })
+            .limit(30);
+
+        // C. Frases Inativas (90 Dias)
+        const dataCorte = new Date();
+        dataCorte.setDate(dataCorte.getDate() - 90);
+        
+        const { data: semUso90d } = await _supabase
+            .from('frases')
+            .select('*')
+            .or(`ultimo_uso.lt.${dataCorte.toISOString()},ultimo_uso.is.null`)
+            .order('ultimo_uso', { ascending: true });
+
+        // D. Ranking de Usuários
+        const { data: logsUsuarios } = await _supabase
+            .from('logs')
+            .select('usuario');
+
+        // E. Totalizadores
+        const { count: totalFrases } = await _supabase.from('frases').select('*', { count: 'exact', head: true });
+        
+        // 3. PROCESSAMENTO INTELIGENTE (Anti-Duplicidade)
+        
+        // Processa Usuários
+        const rankingUsuarios = processarRankingUsuarios(logsUsuarios, mapaNomes);
+        
+        // Processa Frases (Remove do LOW quem já está no TOP)
+        const topLista = topFrases || [];
+        const idsTop = topLista.map(f => f.id);
+        
+        const lowLista = (lowCandidates || [])
+            .filter(f => !idsTop.includes(f.id)) // AQUI ESTÁ A CORREÇÃO: Remove quem já é Top
+            .slice(0, 5); // Pega apenas os 5 primeiros que sobraram
+
+        const totalUsosGerais = logsUsuarios ? logsUsuarios.length : 0;
+
+        // 4. RENDERIZAÇÃO
+        renderizarKPIs({ totalUsos: totalUsosGerais, totalFrases: totalFrases || 0, totalInativas: semUso90d?.length || 0, totalUsers: rankingUsuarios.all.length });
+        
+        renderizarTabelaUsuarios(rankingUsuarios.top5, 'lista-top-users', 'green');
+        renderizarTabelaUsuarios(rankingUsuarios.bottom5, 'lista-bottom-users', 'gray');
+        
+        renderizarTopFrases(topLista, 'lista-top-frases');
+        renderizarLowFrases(lowLista, 'lista-low-frases');
+        renderizarFrasesSemUso(semUso90d || [], mapaNomes);
+
+        // Realtime
+        if (!dashboardSubscription) {
+            dashboardSubscription = _supabase.channel('dash-realtime')
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'logs' }, () => setTimeout(carregarDashboard, 2000))
+                .subscribe();
+        }
+
+    } catch (e) {
+        console.error("Erro Dashboard:", e);
+    }
+}
+
+function processarRankingUsuarios(logs, mapaNomes) {
+    if(!logs) return { top5: [], bottom5: [], all: [] };
     
-    <div id="modal-cep" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 animate-fade-in">
-            <div class="bg-blue-600 p-4 text-white flex justify-between items-center">
-                <h3 class="font-bold text-lg"><i class="fas fa-map-marker-alt mr-2"></i>Consulta CEP</h3>
-                <button onclick="fecharModalCEP()" class="hover:bg-blue-700 p-1 rounded-full"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-6">
-                <div class="flex gap-2 mb-4">
-                    <input id="cep-input" type="text" placeholder="00000-000" maxlength="9" class="flex-1 p-3 border border-slate-200 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500">
-                    <button onclick="buscarCEP()" class="bg-blue-600 text-white px-4 rounded-xl hover:bg-blue-700"><i class="fas fa-search"></i></button>
-                </div>
-                
-                <div id="cep-loading" class="hidden text-center py-4 text-blue-500"><i class="fas fa-circle-notch fa-spin text-2xl"></i></div>
-                
-                <div id="cep-resultado" class="hidden bg-blue-50 rounded-xl p-4 border border-blue-100 text-sm space-y-2">
-                    <div class="flex justify-between"><span class="text-blue-400 font-bold uppercase text-[10px]">Logradouro</span> <span id="cep-logradouro" class="font-bold text-slate-700 text-right"></span></div>
-                    <div class="flex justify-between"><span class="text-blue-400 font-bold uppercase text-[10px]">Bairro</span> <span id="cep-bairro" class="font-bold text-slate-700 text-right"></span></div>
-                    <div class="flex justify-between"><span class="text-blue-400 font-bold uppercase text-[10px]">Cidade/UF</span> <span id="cep-localidade" class="font-bold text-slate-700 text-right"></span></div>
-                    <div class="flex justify-between border-t border-blue-200 pt-2 mt-2"><span class="text-blue-400 font-bold uppercase text-[10px]">CEP</span> <span id="cep-display-num" class="font-black text-blue-600 text-right"></span></div>
-                </div>
-            </div>
-        </div>
-    </div>
+    const contagem = {};
+    logs.forEach(l => {
+        if(l.usuario) contagem[l.usuario] = (contagem[l.usuario] || 0) + 1;
+    });
 
-    <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 animate-fade-in">
-            <div class="bg-purple-600 p-4 text-white flex justify-between items-center">
-                <h3 class="font-bold text-lg"><i class="fas fa-calculator mr-2"></i>Idade Exata</h3>
-                <button onclick="fecharModalIdade()" class="hover:bg-purple-700 p-1 rounded-full"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-6 space-y-4">
-                <div>
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Data de Nascimento</label>
-                    <input id="nasc-input" type="text" placeholder="dd/mm/aaaa" maxlength="10" oninput="mascaraData(this)" class="w-full p-3 border border-slate-200 rounded-xl text-center text-lg font-bold text-slate-700 focus:border-purple-500 outline-none placeholder-slate-300">
-                </div>
-                <button onclick="calcularIdade()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-xl shadow-lg transition transform active:scale-95">Calcular</button>
-                
-                <div id="idade-resultado-box" class="hidden bg-purple-50 rounded-xl p-4 border border-purple-100 text-center animate-fade-in">
-                    <p class="text-[10px] text-purple-400 font-bold uppercase mb-2">Idade Completa</p>
-                    <div class="grid grid-cols-3 gap-2 mb-4">
-                        <div class="bg-white p-2 rounded-lg shadow-sm border border-purple-50"><span id="res-anos" class="block text-xl font-black text-purple-600 leading-none">0</span><span class="text-[8px] font-bold text-slate-400">ANOS</span></div>
-                        <div class="bg-white p-2 rounded-lg shadow-sm border border-purple-50"><span id="res-meses" class="block text-xl font-black text-purple-600 leading-none">0</span><span class="text-[8px] font-bold text-slate-400">MESES</span></div>
-                        <div class="bg-white p-2 rounded-lg shadow-sm border border-purple-50"><span id="res-dias" class="block text-xl font-black text-purple-600 leading-none">0</span><span class="text-[8px] font-bold text-slate-400">DIAS</span></div>
-                    </div>
-                    <div class="bg-white p-3 rounded-lg border border-purple-100 shadow-sm flex justify-between items-center px-4">
-                        <span class="text-[10px] text-slate-400 font-bold uppercase">Total Dias Vividos</span>
-                        <p id="res-total-dias" class="text-xl font-black text-slate-700">0</p>
-                    </div>
-                    <p class="text-[10px] text-slate-400 mt-2 font-mono" id="data-nasc-display"></p>
-                </div>
-            </div>
-        </div>
-    </div>
+    const arrayUsers = Object.entries(contagem).map(([user, qtd]) => ({
+        username: user,
+        nome: mapaNomes[user] || formatarNomeUser(user), 
+        qtd: qtd
+    }));
 
-    <div id="modal-frase" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden modal-content relative">
-            <div class="bg-gray-50 px-8 py-5 border-b border-gray-100 flex justify-between items-center">
-                <h3 id="modal-title" class="text-xl font-extrabold text-gray-800 flex items-center gap-2">Nova Frase</h3>
-                <button onclick="fecharModalFrase()" class="text-gray-400 hover:text-red-500 transition text-xl"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="p-8">
-                <input type="hidden" id="id-frase">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                    <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Empresa</label><input id="inp-empresa" type="text" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 border-gray-200"></div>
-                    <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Motivo</label><input id="inp-motivo" type="text" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 border-gray-200"></div>
-                    <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Documento</label><input id="inp-doc" type="text" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 border-gray-200"></div>
-                </div>
-                <div class="mb-2"><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Conteúdo</label><textarea id="inp-conteudo" rows="5" class="w-full p-4 border rounded-xl text-lg bg-gray-50 outline-none focus:border-blue-500 border-gray-200"></textarea></div>
-            </div>
-            <div class="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-3">
-                <button onclick="fecharModalFrase()" class="px-6 py-2 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-200 transition">Cancelar</button>
-                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-xl font-bold shadow-lg transition transform active:scale-95">Salvar</button>
-            </div>
-        </div>
-    </div>
+    arrayUsers.sort((a, b) => b.qtd - a.qtd);
 
-    <div id="modal-usuario" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-        <div class="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
-            <h3 id="modal-user-title" class="text-lg font-bold text-slate-700 mb-4">Novo Membro</h3>
-            <input type="hidden" id="id-user-edit">
-            <div class="space-y-3">
-                <input id="nome-novo" type="text" placeholder="Nome Completo" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                <input id="user-novo" type="text" placeholder="Login (ID)" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                <input id="pass-novo" type="text" placeholder="Senha" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                <select id="perfil-novo" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                    <option value="user">Colaborador</option>
-                    <option value="admin">Administrador</option>
-                </select>
-                <div class="flex items-center gap-2 mt-2 ml-1">
-                    <input type="checkbox" id="ativo-novo" class="w-4 h-4 text-blue-600 rounded cursor-pointer accent-blue-600">
-                    <label for="ativo-novo" class="text-sm text-slate-600 font-bold cursor-pointer">Usuário Ativo</label>
-                </div>
-            </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button onclick="fecharModalUsuario()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-lg">Cancelar</button>
-                <button onclick="salvarUsuario()" class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md">Salvar</button>
-            </div>
-        </div>
-    </div>
+    // Mesma lógica de exclusão para usuários (se tiver poucos usuários)
+    const top5 = arrayUsers.slice(0, 5);
+    const topUsersIds = top5.map(u => u.username);
+    
+    // Bottom 5 removendo quem já está no Top 5 (evita repetir nomes se tiver pouca gente)
+    let bottom5 = [...arrayUsers].reverse().filter(u => !topUsersIds.includes(u.username)).slice(0, 5);
+    
+    // Se a equipe for muito pequena (ex: 3 pessoas), o bottom ficaria vazio com a regra acima.
+    // Nesse caso, liberamos a repetição para não mostrar tabela vazia.
+    if(arrayUsers.length < 10 && bottom5.length === 0) {
+         bottom5 = [...arrayUsers].reverse().slice(0, 5);
+    }
 
-    <div id="app-flow" class="hidden flex flex-col h-screen">
-        <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
-            <div class="container mx-auto px-6 h-full flex items-center justify-between">
-                <div class="flex items-center gap-8">
-                    <div class="flex items-center gap-2 text-white cursor-pointer" onclick="navegar('biblioteca')">
-                        <i class="fas fa-quote-right text-blue-500 text-xl"></i>
-                        <span class="font-extrabold text-xl tracking-tight">Gupy<span class="text-blue-500">Frases</span></span>
-                    </div>
-                    <div class="hidden md:flex items-center gap-2">
-                        <button onclick="navegar('biblioteca')" id="menu-biblioteca" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-book-open mr-2"></i>Biblioteca</button>
-                        <div id="admin-menu-items" class="hidden flex gap-2 border-l border-slate-700 pl-2 ml-2">
-                            <button onclick="navegar('equipe')" id="menu-equipe" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-users-cog mr-2"></i>Equipe</button>
-                            <button onclick="navegar('logs')" id="menu-logs" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-history mr-2"></i>Logs</button>
-                            <button onclick="navegar('dashboard')" id="menu-dashboard" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-chart-pie mr-2"></i>Dashboard</button>
+    return {
+        top5: top5,
+        bottom5: bottom5,
+        all: arrayUsers
+    };
+}
+
+function formatarNomeUser(u) {
+    return u.charAt(0).toUpperCase() + u.slice(1);
+}
+
+// --- RENDERIZADORES ---
+
+function exibirCarregando() {
+    const loading = '<tr><td colspan="4" class="p-4 text-center text-slate-400 animate-pulse text-xs">Carregando dados...</td></tr>';
+    ['lista-top-users', 'lista-bottom-users', 'lista-top-frases', 'lista-low-frases', 'lista-frases-sem-uso'].forEach(id => {
+        const el = document.getElementById(id); if(el) el.innerHTML = loading;
+    });
+}
+
+function renderizarKPIs(stats) {
+    setTexto('kpi-total-usos', stats.totalUsos);
+    setTexto('kpi-frases-ativas', stats.totalFrases);
+    setTexto('kpi-total-users', stats.totalUsers);
+    
+    const elSemUso = document.getElementById('contador-sem-uso');
+    if(elSemUso) {
+        elSemUso.innerText = stats.totalInativas;
+        elSemUso.className = stats.totalInativas > 0 ? "text-2xl font-black text-orange-500" : "text-2xl font-black text-green-500";
+    }
+}
+
+function renderizarTabelaUsuarios(lista, elementId, corTheme) {
+    const tbody = document.getElementById(elementId);
+    if (!tbody) return;
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Dados insuficientes para ranking reverso.</td></tr>'; return; }
+
+    tbody.innerHTML = lista.map((u, i) => `
+        <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition">
+            <td class="px-5 py-3">
+                <div class="flex justify-between items-center">
+                    <div class="flex items-center gap-3">
+                        <div class="w-6 text-xs font-bold text-slate-300">#${i + 1}</div>
+                        <div>
+                            <p class="font-bold text-slate-700 text-xs">${u.nome}</p>
+                            <p class="text-[10px] text-slate-400">@${u.username}</p>
                         </div>
                     </div>
+                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-${corTheme}-100 text-${corTheme}-700">${u.qtd} ações</span>
                 </div>
-                <div class="flex items-center gap-4 border-l border-slate-700 pl-6">
-                    <div class="text-right hidden sm:block">
-                        <p id="user-name-display" class="text-sm font-bold text-white leading-none">Usuário</p>
-                        <p id="user-role-display" class="text-[10px] text-blue-400 mt-1 font-extrabold uppercase">...</p>
+            </td>
+        </tr>`).join('');
+}
+
+function renderizarTopFrases(lista, elementId) {
+    const tbody = document.getElementById(elementId);
+    if (!tbody) return;
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Sem dados.</td></tr>'; return; }
+
+    tbody.innerHTML = lista.map((f, i) => {
+        let icon = `<span class="text-slate-300 text-xs">#${i+1}</span>`;
+        if(i===0) icon = '👑'; if(i===1) icon = '🥈'; if(i===2) icon = '🥉';
+
+        return `
+        <tr class="border-b border-slate-50 hover:bg-blue-50/20 transition">
+            <td class="px-5 py-3">
+                <div class="flex items-start gap-3">
+                    <div class="mt-0.5 font-bold w-4 text-center">${icon}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-[10px] uppercase font-bold text-blue-600 truncate mr-2">${f.empresa || 'Geral'}</span>
+                            <span class="text-[9px] font-mono text-slate-300">ID:${f.id}</span>
+                        </div>
+                        <p class="text-xs text-slate-600 line-clamp-1 mt-0.5 font-medium">${f.conteudo}</p>
                     </div>
-                    <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-md border-2 border-slate-800 text-lg"><span id="avatar-initial">U</span></div>
-                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition ml-2"><i class="fas fa-sign-out-alt"></i></button>
-                </div>
-            </div>
-        </nav>
-
-        <header class="bg-white border-b border-gray-200 py-4 z-40">
-            <div class="container mx-auto px-6 flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
-                <div class="relative flex-1 group">
-                    <input type="text" id="global-search" oninput="debounceBusca()" placeholder="🔎 Pesquisar..." 
-                        class="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-slate-700 font-semibold transition-all outline-none">
-                    <i class="fas fa-search absolute left-4 top-3.5 text-slate-400 text-lg group-focus-within:text-blue-500 transition-colors"></i>
-                </div>
-                <div class="flex gap-3 shrink-0">
-                    <div class="relative group w-40">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400"><i class="fas fa-calculator"></i></div>
-                        <input type="text" id="quick-idade" placeholder="Data (Idade)" maxlength="10" class="w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-purple-50/50 border border-purple-100 focus:ring-2 focus:ring-purple-200 placeholder-purple-300 transition-all" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularIdadeHeader()">
-                    </div>
-                    <div class="relative group w-32">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-blue-400"><i class="fas fa-map-marker-alt"></i></div>
-                        <input type="text" id="quick-cep" placeholder="CEP" maxlength="9" class="w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-blue-50/50 border border-blue-100 focus:ring-2 focus:ring-blue-200 placeholder-blue-300 transition-all" onkeyup="if(event.key === 'Enter') buscarCEPHeader()">
+                    <div class="self-center ml-2">
+                        <span class="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm whitespace-nowrap">${f.usos || 0} Usos</span>
                     </div>
                 </div>
-            </div>
-        </header>
+            </td>
+        </tr>`;
+    }).join('');
+}
 
-        <div id="filter-bar" class="bg-slate-50 border-b border-slate-200 py-2.5 z-30 sticky top-0">
-            <div class="container mx-auto px-6 flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1 lg:pb-0 scrollbar-hide">
-                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2 shrink-0"><i class="fas fa-filter mr-1"></i> Filtros:</span>
-                <select id="filtro-empresa" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">🏢 Empresas</option></select>
-                <select id="filtro-motivo" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">🎯 Motivos</option></select>
-                <select id="filtro-doc" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">📄 Docs</option></select>
-                <button onclick="limparFiltros()" class="text-xs font-bold text-red-400 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition"><i class="fas fa-times mr-1"></i> Limpar</button>
-                <div class="w-px h-6 bg-slate-200 mx-2 shrink-0"></div>
-                
-                <button id="btn-add-global" onclick="abrirModalFrase()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-plus"></i> Nova Frase</button>
-                <button id="btn-add-member" onclick="abrirModalUsuario()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-user-plus"></i> Novo Membro</button>
-                <button id="btn-refresh-logs" onclick="carregarLogs()" class="hidden bg-white border border-slate-200 text-slate-600 hover:text-blue-600 px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm transition items-center gap-2"><i class="fas fa-sync-alt"></i> Atualizar</button>
-            </div>
-        </div>
+function renderizarLowFrases(lista, elementId) {
+    const tbody = document.getElementById(elementId);
+    if (!tbody) return;
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Nenhuma frase encontrada (com pelo menos 1 uso) fora do Top 5.</td></tr>'; return; }
 
-        <main class="flex-1 overflow-y-auto bg-slate-100 p-6">
-            <div class="container mx-auto max-w-7xl h-full flex flex-col">
-                
-                <section id="view-biblioteca" class="view-section flex-grow">
-                    <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full pb-20"></div>
-                </section>
+    tbody.innerHTML = lista.map((f, i) => `
+        <tr class="border-b border-slate-50 hover:bg-orange-50/20 transition">
+            <td class="px-5 py-3">
+                <div class="flex items-start gap-3">
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-[10px] uppercase font-bold text-slate-500 truncate mr-2">${f.motivo || 'Geral'}</span>
+                            <span class="text-[9px] font-mono text-slate-300">ID:${f.id}</span>
+                        </div>
+                        <p class="text-xs text-slate-400 line-clamp-1 mt-0.5 italic">"${f.conteudo}"</p>
+                    </div>
+                    <div class="self-center ml-2">
+                         <span class="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap">${f.usos} Usos</span>
+                    </div>
+                </div>
+            </td>
+        </tr>`).join('');
+}
 
-                <section id="view-dashboard" class="view-section hidden flex-grow space-y-6">
-                     <div id="painel-dashboard" class="space-y-6"></div>
-                </section>
+function renderizarFrasesSemUso(lista, mapaNomes) {
+    const tbody = document.getElementById('lista-frases-sem-uso');
+    if (!tbody) return;
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-6 text-center text-green-600 bg-green-50/50 rounded-lg text-sm font-bold"><i class="fas fa-check-circle mr-2"></i>Tudo limpo!</td></tr>'; return; }
 
-                <section id="view-logs" class="view-section hidden flex-grow space-y-6">
-                    <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
-                </section>
+    tbody.innerHTML = lista.map(f => {
+        let diasSemUso = "Nunca usada";
+        if (f.ultimo_uso) {
+            const diffTime = Math.abs(new Date() - new Date(f.ultimo_uso));
+            diasSemUso = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + " dias";
+        }
 
-                <section id="view-equipe" class="view-section hidden flex-grow">
-                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8" id="lista-equipe-container"></div>
-                    <div class="bg-white rounded-2xl shadow-sm border border-red-100 p-6"><h4 class="text-sm font-extrabold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-database text-red-400"></i> Dados</h4><div class="flex gap-4"><button onclick="baixarBackup()" class="flex-1 bg-slate-50 border border-slate-200 font-bold py-3 rounded-xl text-xs hover:bg-slate-100">Baixar Backup</button></div></div>
-                </section>
-                
-                <footer class="mt-auto pt-6 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-4">Desenvolvido por Pedro Gabriel</footer>
-            </div>
-        </main>
+        const nomeCriador = mapaNomes[f.revisado_por] || f.revisado_por || 'Sistema';
 
-        <div id="chat-container" class="fixed bottom-6 right-6 z-50">
-            <button onclick="toggleChat()" id="chat-toggle-btn" class="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 relative">
-                <i class="fas fa-comments text-2xl"></i>
-                <span id="badge-online" class="absolute top-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full hidden"></span>
-                <span id="badge-unread" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-slate-900 hidden">0</span>
-            </button>
-            <div id="chat-window" class="absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col chat-widget chat-closed" style="height: 450px;">
-                <div class="bg-slate-900 text-white p-3 flex justify-between items-center shadow-md"><div><h4 class="font-bold text-sm">Chat da Equipe</h4><span id="online-count" class="text-[10px] text-slate-300">Offline</span></div><button onclick="toggleChat()"><i class="fas fa-times"></i></button></div>
-                <div id="online-users-list" class="bg-slate-50 border-b border-slate-200 px-4 py-1 text-[10px] text-slate-500 hidden"></div>
-                <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 text-xs"></div>
-                <div class="p-2 bg-white border-t border-slate-100 flex gap-2"><input type="text" id="chat-input" class="flex-1 bg-slate-100 border-0 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Mensagem..." onkeypress="if(event.key === 'Enter') enviarMensagem()"><button onclick="enviarMensagem()" class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center"><i class="fas fa-paper-plane text-xs"></i></button></div>
-            </div>
-        </div>
-    </div>
+        return `
+        <tr class="border-b border-slate-50 hover:bg-red-50 transition group">
+            <td class="px-5 py-3 align-top w-16">
+                <span class="text-[9px] font-mono bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 block text-center">#${f.id}</span>
+            </td>
+            <td class="px-5 py-3">
+                <div class="flex-1 min-w-0">
+                    <span class="text-[10px] font-bold text-slate-600 uppercase block mb-0.5">${f.motivo || 'Sem Motivo'}</span>
+                    <p class="text-xs text-slate-500 line-clamp-2" title="${f.conteudo}">${f.conteudo}</p>
+                </div>
+            </td>
+            <td class="px-5 py-3 align-top">
+                <div class="flex items-center gap-1.5">
+                    <div class="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-bold text-slate-500">
+                        ${nomeCriador.charAt(0).toUpperCase()}
+                    </div>
+                    <span class="text-xs font-bold text-slate-600 truncate max-w-[80px]" title="${f.revisado_por}">
+                        ${nomeCriador}
+                    </span>
+                </div>
+            </td>
+            <td class="px-5 py-3 align-top text-right">
+                <div class="text-[9px] font-bold text-red-400 uppercase tracking-wide">Inativa há</div>
+                <div class="text-sm font-black text-slate-700 leading-tight mb-1">${diasSemUso}</div>
+                <button onclick="deletarFraseDashboard(${f.id})" class="text-red-400 hover:text-white hover:bg-red-500 border border-red-200 hover:border-red-500 text-[10px] px-2 py-0.5 rounded transition">Excluir</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
 
-    <script src="js/app.js"></script>
-    <script src="js/biblioteca.js"></script>
-    <script src="js/dashboard.js"></script>
-    <script src="js/logs.js"></script>
-    <script src="js/equipe.js"></script>
-</body>
-</html>
+async function deletarFraseDashboard(id) {
+    const result = await Swal.fire({title: 'Limpar frase?', text: `Frase #${id} inativa.`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Sim, excluir'});
+    if (result.isConfirmed) {
+        await _supabase.from('frases').delete().eq('id', id);
+        registrarLog('LIMPEZA', `Dashboard: Removeu frase #${id}`);
+        carregarDashboard();
+    }
+}
+
+function setTexto(id, valor) { const el = document.getElementById(id); if(el) el.innerText = valor; }
