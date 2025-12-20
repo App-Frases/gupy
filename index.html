@@ -22,12 +22,11 @@
         .nav-item:hover { background-color: #334155; color: white; }
         .active-nav { background-color: #2563eb; color: white; }
         
-        /* Utilitários */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        
+
         .header-select {
             background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
             background-position: right 0.5rem center;
@@ -36,8 +35,7 @@
             padding-right: 2rem;
             -webkit-appearance: none; appearance: none;
         }
-
-        /* Animações */
+        
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
         
@@ -87,9 +85,7 @@
                     <input id="cep-input" type="text" placeholder="00000-000" maxlength="9" class="flex-1 p-3.5 border-2 border-slate-100 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all placeholder-slate-300">
                     <button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95"><i class="fas fa-search"></i></button>
                 </div>
-                
                 <div id="cep-loading" class="hidden text-center py-8 text-blue-500"><i class="fas fa-circle-notch fa-spin text-3xl"></i><p class="text-xs font-bold mt-2 uppercase tracking-wide">Buscando...</p></div>
-                
                 <div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-3 shadow-inner">
                     <div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> <span id="cep-logradouro" class="font-bold text-slate-700 text-right text-sm"></span></div>
                     <div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Bairro</span> <span id="cep-bairro" class="font-bold text-slate-700 text-right text-sm"></span></div>
@@ -101,51 +97,72 @@
     </div>
 
     <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
-            <div class="bg-gradient-to-r from-purple-600 to-indigo-600 p-5 text-white flex justify-between items-center shadow-lg">
-                <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-birthday-cake text-yellow-300"></i> Calculadora</h3>
-                <button onclick="fecharModalIdade()" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md"><i class="fas fa-times text-sm"></i></button>
-            </div>
-            <div class="p-6 space-y-5">
-                <div class="relative group">
-                    <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Data de Nascimento</label>
-                    <div class="relative">
-                        <input id="nasc-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularIdade()"
-                            class="w-full pl-12 pr-4 py-3.5 border-2 border-slate-100 rounded-2xl text-xl font-black text-slate-700 outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
-                        <i class="fas fa-calendar-alt absolute left-4 top-4 text-slate-300 text-lg group-focus-within:text-indigo-500 transition-colors"></i>
-                    </div>
-                </div>
-
-                <button onclick="calcularIdade()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3.5 rounded-xl shadow-xl shadow-slate-200/50 transition transform active:scale-95 flex items-center justify-center gap-2 group">
-                    <span>Calcular Agora</span><i class="fas fa-arrow-right group-hover:translate-x-1 transition-transform"></i>
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
+            <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
+                <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2">
+                    <i class="fas fa-calendar-alt text-blue-400"></i> Calculadora de Datas
+                </h3>
+                <button onclick="fecharModalIdade()" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md">
+                    <i class="fas fa-times text-sm"></i>
                 </button>
-                
-                <div id="idade-resultado-box" class="hidden animate-fade-in space-y-4 pt-2">
-                    <div class="flex items-center gap-4 before:h-px before:flex-1 before:bg-slate-100 after:h-px after:flex-1 after:bg-slate-100"><span class="text-[10px] font-bold text-slate-400 uppercase">Resultado</span></div>
-                    
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="bg-blue-50 p-3 rounded-2xl border border-blue-100 flex flex-col items-center justify-center relative overflow-hidden group">
-                            <i class="fas fa-user-clock absolute -right-2 -bottom-2 text-4xl text-blue-100 group-hover:scale-110 transition-transform"></i>
-                            <span id="res-anos" class="text-3xl font-black text-blue-600 leading-none z-10">0</span>
-                            <span class="text-[9px] font-bold text-blue-400 uppercase mt-1 z-10">Anos</span>
-                        </div>
-                        <div class="bg-purple-50 p-3 rounded-2xl border border-purple-100 flex flex-col items-center justify-center relative overflow-hidden group">
-                            <i class="fas fa-calendar-check absolute -right-2 -bottom-2 text-4xl text-purple-100 group-hover:scale-110 transition-transform"></i>
-                            <span id="res-meses" class="text-3xl font-black text-purple-600 leading-none z-10">0</span>
-                            <span class="text-[9px] font-bold text-purple-400 uppercase mt-1 z-10">Meses</span>
-                        </div>
-                        <div class="bg-emerald-50 p-3 rounded-2xl border border-emerald-100 flex flex-col items-center justify-center relative overflow-hidden group">
-                            <i class="fas fa-sun absolute -right-2 -bottom-2 text-4xl text-emerald-100 group-hover:scale-110 transition-transform"></i>
-                            <span id="res-dias" class="text-3xl font-black text-emerald-600 leading-none z-10">0</span>
-                            <span class="text-[9px] font-bold text-emerald-400 uppercase mt-1 z-10">Dias</span>
-                        </div>
-                        <div class="bg-slate-50 p-3 rounded-2xl border border-slate-100 flex flex-col items-center justify-center relative overflow-hidden group">
-                            <i class="fas fa-infinity absolute -right-2 -bottom-2 text-4xl text-slate-100 group-hover:scale-110 transition-transform"></i>
-                            <span id="res-total-dias" class="text-lg font-black text-slate-600 leading-tight z-10">0</span>
-                            <span class="text-[8px] font-bold text-slate-400 uppercase mt-1 z-10">Dias Vividos</span>
+            </div>
+
+            <div class="p-6 space-y-6">
+                <div class="flex gap-4 items-end">
+                    <div class="relative flex-1 group">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Insira uma Data</label>
+                        <div class="relative">
+                            <input id="nasc-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularDatas()"
+                                class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
+                            <i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg group-focus-within:text-blue-500 transition-colors"></i>
                         </div>
                     </div>
-                    <p class="text-[10px] text-center text-slate-400 font-mono bg-slate-50 py-1 rounded-lg" id="data-nasc-display">--/--/----</p>
+                    <button onclick="calcularDatas()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">
+                        Calcular
+                    </button>
+                </div>
+                
+                <div id="idade-resultado-box" class="hidden animate-fade-in space-y-4">
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center">
+                            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span>
+                            <span id="data-nasc-display" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span>
+                        </div>
+                        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden group">
+                            <i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10 group-hover:scale-110 transition-transform"></i>
+                            <span class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias Corridos</span>
+                            <div class="flex items-baseline gap-1">
+                                <span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span>
+                                <span class="text-sm font-bold text-blue-200">dias</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-4 py-2">
+                        <div class="h-px bg-slate-200 flex-1"></div>
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Tempo Detalhado</span>
+                        <div class="h-px bg-slate-200 flex-1"></div>
+                    </div>
+
+                    <div class="grid grid-cols-4 gap-3">
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group">
+                            <span id="res-anos" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span>
+                        </div>
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group">
+                            <span id="res-meses" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span>
+                        </div>
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group">
+                            <span id="res-semanas" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span>
+                        </div>
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group">
+                            <span id="res-dias" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span>
+                            <span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -234,8 +251,8 @@
                 </div>
                 <div class="flex gap-3 shrink-0">
                     <div class="relative group w-40">
-                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400"><i class="fas fa-calculator"></i></div>
-                        <input type="text" id="quick-idade" placeholder="Data (Idade)" maxlength="10" class="w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-purple-50/50 border border-purple-100 focus:ring-2 focus:ring-purple-200 placeholder-purple-300 transition-all" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularIdadeHeader()">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400"><i class="fas fa-calendar-alt"></i></div>
+                        <input type="text" id="quick-idade" placeholder="Datas (Calc)" maxlength="10" class="w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-purple-50/50 border border-purple-100 focus:ring-2 focus:ring-purple-200 placeholder-purple-300 transition-all" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularIdadeHeader()">
                     </div>
                     <div class="relative group w-32">
                         <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-blue-400"><i class="fas fa-map-marker-alt"></i></div>
