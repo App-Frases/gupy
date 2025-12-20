@@ -18,8 +18,17 @@
     <style>
         /* Ajustes finos de scrollbar e fontes */
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
         .active-nav { background-color: #eff6ff; color: #2563eb; border-right: 3px solid #2563eb; }
+        
+        /* Scrollbar personalizada sutil */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* Animações */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
     </style>
 </head>
 <body class="h-screen flex overflow-hidden text-slate-600">
@@ -75,7 +84,7 @@
             
             <div class="hidden md:flex items-center bg-slate-100 rounded-lg px-3 py-1.5 w-64 border border-transparent focus-within:border-blue-300 focus-within:bg-white transition">
                 <i class="fas fa-search text-slate-400 text-xs"></i>
-                <input type="text" id="global-search" placeholder="Buscar..." class="bg-transparent border-none outline-none text-xs font-bold text-slate-600 ml-2 w-full placeholder:font-normal">
+                <input type="text" id="global-search" onkeyup="aplicarFiltrosGlobal()" placeholder="Buscar..." class="bg-transparent border-none outline-none text-xs font-bold text-slate-600 ml-2 w-full placeholder:font-normal">
             </div>
         </header>
 
@@ -87,7 +96,7 @@
                         <i class="fas fa-lock"></i>
                     </div>
                     <h2 class="text-xl font-extrabold text-slate-800 mb-1">Acesso Restrito</h2>
-                    <p class="text-sm text-slate-400 mb-6">Entre com suas credenciais de administrador.</p>
+                    <p class="text-sm text-slate-400 mb-6">Entre com suas credenciais.</p>
                     
                     <form onsubmit="event.preventDefault(); fazerLogin();" class="space-y-4">
                         <input type="text" id="login-user" placeholder="Usuário" class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition">
@@ -99,10 +108,9 @@
                 </div>
             </div>
 
-            <div id="view-dashboard" class="space-y-6 animate-fade-in">
+            <div id="view-dashboard" class="space-y-6 animate-fade-in hidden">
                 
                 <div id="painel-dashboard" class="space-y-6">
-                    
                     <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
                             <div class="flex justify-between items-start">
@@ -116,7 +124,7 @@
                         <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Frases no Sistema</p>
+                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Frases Ativas</p>
                                     <p class="text-2xl font-black text-slate-700 mt-1" id="kpi-frases-ativas">0</p>
                                 </div>
                                 <div class="bg-slate-100 text-slate-500 p-2 rounded-lg text-lg"><i class="fas fa-database"></i></div>
@@ -125,7 +133,7 @@
                         <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sem Uso (90d)</p>
+                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inativas (90d)</p>
                                     <div id="contador-sem-uso" class="text-2xl font-black text-green-500 mt-1">0</div>
                                 </div>
                                 <div class="bg-orange-50 text-orange-500 p-2 rounded-lg text-lg"><i class="fas fa-stopwatch"></i></div>
@@ -193,17 +201,23 @@
             </div>
             
             <div id="view-frases" class="hidden animate-fade-in space-y-4">
-                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-                    <h2 class="font-bold text-slate-700">Biblioteca de Frases</h2>
+                <div class="flex flex-wrap justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100 gap-4">
+                    <div class="flex gap-2 w-full md:w-auto">
+                        <select id="filtro-empresa" onchange="aplicarFiltros('empresa')" class="text-xs border rounded px-2 py-1.5 bg-slate-50 outline-none focus:border-blue-500"><option value="">🏢 Empresas</option></select>
+                        <select id="filtro-motivo" onchange="aplicarFiltros('motivo')" class="text-xs border rounded px-2 py-1.5 bg-slate-50 outline-none focus:border-blue-500"><option value="">🎯 Motivos</option></select>
+                        <select id="filtro-doc" onchange="aplicarFiltros('doc')" class="text-xs border rounded px-2 py-1.5 bg-slate-50 outline-none focus:border-blue-500"><option value="">📄 Docs</option></select>
+                        <button onclick="limparFiltros()" class="text-slate-400 hover:text-slate-600 px-2" title="Limpar Filtros"><i class="fas fa-times"></i></button>
+                    </div>
+
                     <div class="flex gap-2">
                          <input type="file" id="input-import-sheet" class="hidden" accept=".xlsx, .xls" onchange="processarArquivoFrases(this)">
-                         <button onclick="importarPlanilhaFrases()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-green-700 transition"><i class="fas fa-file-excel mr-2"></i>Importar</button>
-                         <button onclick="abrirModalCriarFrase()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition"><i class="fas fa-plus mr-2"></i>Nova Frase</button>
+                         <button onclick="importarPlanilhaFrases()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-green-700 transition shadow-sm"><i class="fas fa-file-excel mr-2"></i>Importar</button>
+                         <button onclick="abrirModalCriarFrase()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition shadow-sm"><i class="fas fa-plus mr-2"></i>Nova</button>
                     </div>
                 </div>
                 
-                <div id="container-frases" class="grid grid-cols-1 gap-4">
-                    <p class="text-center text-slate-400 p-10">Carregue as frases aqui...</p>
+                <div id="grid-frases" class="grid grid-cols-1 gap-4">
+                    <p class="text-center text-slate-400 p-10">Carregando biblioteca...</p>
                 </div>
             </div>
 
@@ -224,20 +238,20 @@
     </main>
 
     <div id="modal-usuario" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center backdrop-blur-sm">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform transition-all scale-100">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform transition-all">
             <h3 id="modal-user-title" class="text-lg font-bold text-slate-700 mb-4">Novo Membro</h3>
             <input type="hidden" id="id-user-edit">
             <div class="space-y-3">
-                <input id="nome-novo" type="text" placeholder="Nome Completo" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm">
-                <input id="user-novo" type="text" placeholder="Login (ID)" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm">
-                <input id="pass-novo" type="text" placeholder="Senha" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm">
-                <select id="perfil-novo" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm">
+                <input id="nome-novo" type="text" placeholder="Nome Completo" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
+                <input id="user-novo" type="text" placeholder="Login (ID)" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
+                <input id="pass-novo" type="text" placeholder="Senha" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
+                <select id="perfil-novo" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
                     <option value="user">Colaborador</option>
                     <option value="admin">Administrador</option>
                 </select>
                 <div class="flex items-center gap-2 mt-2">
-                    <input type="checkbox" id="ativo-novo" class="w-4 h-4 text-blue-600 rounded">
-                    <label for="ativo-novo" class="text-sm text-slate-600 font-bold">Usuário Ativo</label>
+                    <input type="checkbox" id="ativo-novo" class="w-4 h-4 text-blue-600 rounded cursor-pointer">
+                    <label for="ativo-novo" class="text-sm text-slate-600 font-bold cursor-pointer">Usuário Ativo</label>
                 </div>
             </div>
             <div class="mt-6 flex justify-end gap-2">
@@ -252,28 +266,29 @@
             <h3 id="modal-title" class="text-lg font-bold text-slate-700 mb-4">Editar Frase</h3>
             <input type="hidden" id="id-frase">
             <div class="grid grid-cols-2 gap-3 mb-3">
-                <input id="inp-empresa" placeholder="Empresa" class="px-3 py-2 border rounded text-sm bg-slate-50">
-                <input id="inp-motivo" placeholder="Motivo" class="px-3 py-2 border rounded text-sm bg-slate-50">
+                <input id="inp-empresa" placeholder="Empresa" class="px-3 py-2 border rounded text-sm bg-slate-50 outline-none focus:border-blue-500">
+                <input id="inp-motivo" placeholder="Motivo" class="px-3 py-2 border rounded text-sm bg-slate-50 outline-none focus:border-blue-500">
             </div>
-            <input id="inp-doc" placeholder="Documento" class="w-full px-3 py-2 border rounded text-sm bg-slate-50 mb-3">
-            <textarea id="inp-conteudo" rows="4" placeholder="Conteúdo da frase..." class="w-full px-3 py-2 border rounded text-sm bg-slate-50 mb-4"></textarea>
+            <input id="inp-doc" placeholder="Documento" class="w-full px-3 py-2 border rounded text-sm bg-slate-50 mb-3 outline-none focus:border-blue-500">
+            <textarea id="inp-conteudo" rows="4" placeholder="Conteúdo da frase..." class="w-full px-3 py-2 border rounded text-sm bg-slate-50 mb-4 outline-none focus:border-blue-500"></textarea>
             
             <div class="flex justify-end gap-2">
                 <button onclick="document.getElementById('modal-frase').classList.add('hidden')" class="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded">Cancelar</button>
-                <button onclick="salvarFrase()" class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded hover:bg-blue-700">Salvar</button>
+                <button onclick="salvarFrase()" class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded hover:bg-blue-700 shadow-md">Salvar</button>
             </div>
         </div>
     </div>
 
     <script>
-        // CONFIGURAÇÃO DO SUPABASE (Substitua pelas suas chaves REAIS)
+        // --- CONFIGURAÇÃO SUPABASE ---
+        // IMPORTANTE: Insira suas credenciais reais aqui
         const SUPABASE_URL = 'SUA_URL_SUPABASE_AQUI'; 
         const SUPABASE_KEY = 'SUA_KEY_SUPABASE_AQUI';
         const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        let usuarioLogado = null; // Armazena o objeto do usuário
+        let usuarioLogado = null;
 
-        // Função de navegação simples
+        // Sistema de Navegação
         function navegarPara(viewId) {
             // Esconde todas as views
             ['view-dashboard', 'view-frases', 'view-equipe', 'view-logs'].forEach(id => {
@@ -282,33 +297,27 @@
             // Mostra a desejada
             document.getElementById('view-' + viewId).classList.remove('hidden');
             
-            // Atualiza Título
+            // Atualiza Título e Menu Ativo
             const titulos = {
                 'dashboard': 'Dashboard Geral',
                 'frases': 'Gerenciador de Frases',
                 'equipe': 'Membros da Equipe',
                 'logs': 'Registro de Atividades'
             };
-            document.getElementById('titulo-pagina').innerText = titulos[viewId];
+            document.getElementById('titulo-pagina').innerText = titulos[viewId] || 'Gupy Frases';
 
-            // Atualiza Menu Ativo
             document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active-nav'));
             const btnAtivo = document.getElementById('nav-' + viewId);
             if(btnAtivo) btnAtivo.classList.add('active-nav');
 
-            // Gatilhos de carregamento
+            // Dispara carregamentos
             if(viewId === 'dashboard') carregarDashboard();
             if(viewId === 'equipe') carregarEquipe();
             if(viewId === 'logs') carregarLogs();
-            // if(viewId === 'frases') carregarFrases(); // Se existir essa função na sua biblioteca.js
+            if(viewId === 'frases') carregarFrases();
         }
 
-        function logout() {
-            usuarioLogado = null;
-            document.getElementById('view-login').classList.remove('hidden');
-        }
-
-        // Login Simulado (Conecta com Supabase)
+        // Login
         async function fazerLogin() {
             const user = document.getElementById('login-user').value;
             const pass = document.getElementById('login-pass').value;
@@ -322,48 +331,59 @@
                     .single();
 
                 if (error || !data) throw new Error();
-
-                if (!data.ativo) return Swal.fire('Bloqueado', 'Usuário inativo.', 'error');
+                if (!data.ativo) return Swal.fire('Acesso Negado', 'Usuário inativo.', 'error');
 
                 usuarioLogado = data;
                 document.getElementById('nome-usuario-logado').innerText = data.nome || data.username;
                 document.getElementById('avatar-user').innerText = (data.nome || data.username).charAt(0).toUpperCase();
                 
-                // Libera acesso
                 document.getElementById('view-login').classList.add('hidden');
                 
-                // Redireciona com base no perfil
+                // Redireciona
                 if(data.perfil === 'admin') navegarPara('dashboard');
                 else {
-                    // Se não for admin, esconde dashboard e vai pra frases
                     document.getElementById('nav-dashboard').classList.add('hidden');
                     navegarPara('frases');
                 }
-
-                // Log de acesso
+                
+                // Grava log
                 registrarLog('LOGIN', 'Acesso realizado');
 
             } catch (e) {
-                Swal.fire('Erro', 'Usuário ou senha inválidos', 'error');
+                Swal.fire('Erro', 'Credenciais inválidas', 'error');
             }
         }
 
-        // Função Global de Log (usada por outros scripts)
+        function logout() {
+            usuarioLogado = null;
+            document.getElementById('view-login').classList.remove('hidden');
+        }
+
+        // Função auxiliar para logs
         async function registrarLog(acao, detalhe) {
             if(!usuarioLogado) return;
             await _supabase.from('logs').insert([{
                 usuario: usuarioLogado.username,
                 acao: acao,
-                detalhe: detalhe
+                detalhe: detalhe,
+                data_hora: new Date().toISOString()
             }]);
+        }
+        
+        // Filtro Global na barra superior (conecta com a função de filtro da biblioteca)
+        function aplicarFiltrosGlobal() {
+            // Se estiver na view de frases, usa o filtro da biblioteca
+            if(!document.getElementById('view-frases').classList.contains('hidden') && typeof aplicarFiltros === 'function') {
+                aplicarFiltros('global');
+            }
+            // (Opcional) Poderia filtrar logs ou equipe aqui também se desejado
         }
     </script>
 
-    <script src="js/biblioteca.js"></script> <script src="js/dashboard.js"></script>  <script src="js/logs.js"></script>       <script src="js/equipe.js"></script>     <script>
-        // Inicialização
-        document.addEventListener('DOMContentLoaded', () => {
-            // Verifica se tem sessão (opcional, aqui força login sempre no refresh por segurança simples)
-        });
-    </script>
+    <script src="js/biblioteca.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/logs.js"></script>
+    <script src="js/equipe.js"></script>
+
 </body>
 </html>
