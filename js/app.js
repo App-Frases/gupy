@@ -1,10 +1,7 @@
 // Local: js/app.js
 
-// CONFIGURAÇÃO DO SUPABASE (Já inserida)
 const SUPABASE_URL = 'https://urmwvabkikftsefztadb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVybXd2YWJraWtmdHNlZnp0YWRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxNjU1NjQsImV4cCI6MjA4MDc0MTU2NH0.SXR6EG3fIE4Ya5ncUec9U2as1B7iykWZhZWN1V5b--E';
-
-// Inicializa o cliente globalmente (acessível por dashboard.js e biblioteca.js)
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 let usuarioLogado = null;
@@ -118,32 +115,43 @@ async function registrarLog(acao, detalhe) {
     }
 }
 
+// --- NAVEGAÇÃO E UTILS ---
+
 function navegar(pagina) {
     if (usuarioLogado.perfil !== 'admin' && (pagina === 'logs' || pagina === 'equipe' || pagina === 'dashboard')) pagina = 'biblioteca';
     abaAtiva = pagina;
     
     // Esconde todas as sections
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); 
-    
     // Mostra a selecionada
     const targetView = document.getElementById(`view-${pagina}`);
     if(targetView) targetView.classList.remove('hidden');
     
-    // Filtros e Botões
+    // Atualiza classes dos botões do menu
+    document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active-nav'));
+    const btnAtivo = document.getElementById(`menu-${pagina}`);
+    if(btnAtivo) btnAtivo.classList.add('active-nav');
+    
+    // Controle da Barra de Filtros e Botões de Ação
     const filterBar = document.getElementById('filter-bar');
     if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
     
     const btns = ['btn-add-global', 'btn-add-member', 'btn-refresh-logs'];
+    // Reseta todos para hidden
     btns.forEach(b => document.getElementById(b)?.classList.add('hidden'));
+    btns.forEach(b => document.getElementById(b)?.classList.remove('flex')); // Garante que tira o flex se tiver
     
     if (pagina === 'biblioteca') {
-        document.getElementById('btn-add-global')?.classList.remove('hidden', 'flex');
+        const btn = document.getElementById('btn-add-global');
+        if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); } // CORRIGIDO: Exibe com flex para alinhar ícone
         carregarFrases();
     } else if (pagina === 'equipe') {
-        document.getElementById('btn-add-member')?.classList.remove('hidden', 'flex');
+        const btn = document.getElementById('btn-add-member');
+        if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); }
         carregarEquipe();
     } else if (pagina === 'logs') {
-        document.getElementById('btn-refresh-logs')?.classList.remove('hidden', 'flex');
+        const btn = document.getElementById('btn-refresh-logs');
+        if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); }
         carregarLogs();
     } else if (pagina === 'dashboard') {
         carregarDashboard();
@@ -163,9 +171,10 @@ function debounceBusca() {
     }, 300); 
 }
 
-// Utils (Idade, CEP, Texto)
 function normalizar(t) { return t ? t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : ""; }
 function formatarTextoBonito(t, tipo) { if (!t) return ""; let l = t.trim().replace(/\s+/g, ' '); if (tipo === 'titulo') return l.toLowerCase().replace(/(?:^|\s)\S/g, a => a.toUpperCase()); return l.charAt(0).toUpperCase() + l.slice(1); }
+
+// --- HEADER UTILS (Idade e CEP Corrigidos) ---
 
 function calcularIdadeHeader() {
     const val = document.getElementById('quick-idade').value;
@@ -175,39 +184,83 @@ function buscarCEPHeader() {
     const val = document.getElementById('quick-cep').value;
     if(val.length >= 8) { document.getElementById('cep-input').value = val; buscarCEP(); document.getElementById('quick-cep').value = ''; document.getElementById('modal-cep').classList.remove('hidden'); }
 }
+
+// CORREÇÃO DA BUSCA CEP
 async function buscarCEP() {
-    const cep = document.getElementById('cep-input').value.replace(/\D/g, ''); const resArea = document.getElementById('cep-resultado'); const loading = document.getElementById('cep-loading');
-    if(cep.length !== 8) return Swal.fire('Erro', 'CEP inválido', 'warning');
-    resArea.classList.add('hidden'); loading.classList.remove('hidden');
-    try { const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); const data = await res.json(); loading.classList.add('hidden');
-        if(data.erro) { Swal.fire('Erro', 'CEP não encontrado', 'error'); return; }
-        document.getElementById('cep-logradouro').innerText = data.logradouro; document.getElementById('cep-bairro').innerText = data.bairro; document.getElementById('cep-localidade').innerText = `${data.localidade}-${data.uf}`;
+    const cepInput = document.getElementById('cep-input');
+    const cep = cepInput.value.replace(/\D/g, ''); 
+    const resArea = document.getElementById('cep-resultado'); 
+    const loading = document.getElementById('cep-loading');
+    
+    if(cep.length !== 8) return Swal.fire('Atenção', 'Digite um CEP válido com 8 números', 'warning');
+    
+    resArea.classList.add('hidden'); 
+    loading.classList.remove('hidden');
+    
+    try { 
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); 
+        const data = await res.json(); 
+        loading.classList.add('hidden');
+        
+        if(data.erro) { 
+            Swal.fire('Não Encontrado', 'Este CEP não existe na base de dados.', 'info'); 
+            return; 
+        }
+        
+        document.getElementById('cep-logradouro').innerText = data.logradouro || '---'; 
+        document.getElementById('cep-bairro').innerText = data.bairro || '---'; 
+        document.getElementById('cep-localidade').innerText = `${data.localidade}-${data.uf}`;
         document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
+        
         resArea.classList.remove('hidden');
-    } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na busca', 'error'); }
+    } catch(e) { 
+        loading.classList.add('hidden'); 
+        Swal.fire('Erro', 'Falha ao consultar servidor de CEP.', 'error'); 
+    }
 }
 
+// CORREÇÃO DA CALCULADORA DE IDADE (Lógica Robusta)
 function calcularIdade() {
     const val = document.getElementById('nasc-input').value; 
     const parts = val.split('/'); 
-    if(parts.length !== 3) return Swal.fire('Erro', 'Data inválida', 'warning');
-    const dNasc = new Date(parts[2], parts[1]-1, parts[0]);
-    const hoje = new Date(); dNasc.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
-    if (dNasc > hoje) return Swal.fire('Erro', 'Data futura', 'warning');
+    if(parts.length !== 3) return Swal.fire('Erro', 'Data inválida. Use DD/MM/AAAA', 'warning');
     
-    const totalDias = Math.ceil(Math.abs(hoje - dNasc) / (1000 * 60 * 60 * 24));
+    const dia = parseInt(parts[0], 10);
+    const mes = parseInt(parts[1], 10) - 1; // Meses em JS são 0-11
+    const ano = parseInt(parts[2], 10);
+    
+    const dNasc = new Date(ano, mes, dia);
+    const hoje = new Date(); 
+    
+    // Zera horas para comparação justa
+    dNasc.setHours(0,0,0,0); 
+    hoje.setHours(0,0,0,0);
+    
+    if (isNaN(dNasc.getTime()) || dNasc > hoje) return Swal.fire('Erro', 'Data inválida ou futura', 'warning');
+    
+    // Cálculo preciso de idade
     let anos = hoje.getFullYear() - dNasc.getFullYear();
     let meses = hoje.getMonth() - dNasc.getMonth();
     let dias = hoje.getDate() - dNasc.getDate();
-    if (dias < 0) { meses--; dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate(); }
-    if (meses < 0) { anos--; meses += 12; }
 
-    document.getElementById('data-nasc-display').innerText = val;
+    if (dias < 0) {
+        meses--;
+        // Pega o último dia do mês anterior para saber quantos dias somar
+        dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
+    }
+    if (meses < 0) {
+        anos--;
+        meses += 12;
+    }
+    
+    const totalDias = Math.floor((hoje - dNasc) / (1000 * 60 * 60 * 24));
+
+    document.getElementById('data-nasc-display').innerText = `Nascido em: ${val}`;
     document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR'); 
     document.getElementById('res-anos').innerText = anos;
     document.getElementById('res-meses').innerText = meses;
-    document.getElementById('res-semanas').innerText = Math.floor(dias / 7);
-    document.getElementById('res-dias').innerText = dias % 7;
+    document.getElementById('res-dias').innerText = dias;
+    
     document.getElementById('idade-resultado-box').classList.remove('hidden');
 }
 
