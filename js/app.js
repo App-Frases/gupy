@@ -129,7 +129,6 @@ function navegar(pagina) {
     const filterBar = document.getElementById('filter-bar');
     if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
     
-    // CORREÇÃO DOS BOTÕES
     const btns = ['btn-add-global', 'btn-add-member', 'btn-refresh-logs'];
     btns.forEach(b => {
         const el = document.getElementById(b);
@@ -138,7 +137,7 @@ function navegar(pagina) {
     
     if (pagina === 'biblioteca') {
         const btn = document.getElementById('btn-add-global');
-        if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); }
+        if(btn) { btn.classList.remove('hidden'); btn.classList.add('flex'); } 
         carregarFrases();
     } else if (pagina === 'equipe') {
         const btn = document.getElementById('btn-add-member');
@@ -173,7 +172,12 @@ function formatarTextoBonito(t, tipo) { if (!t) return ""; let l = t.trim().repl
 
 function calcularIdadeHeader() {
     const val = document.getElementById('quick-idade').value;
-    if(val.length === 10) { document.getElementById('nasc-input').value = val; calcularIdade(); document.getElementById('quick-idade').value = ''; document.getElementById('modal-idade').classList.remove('hidden'); }
+    if(val.length === 10) { 
+        document.getElementById('nasc-input').value = val; 
+        calcularDatas(); 
+        document.getElementById('quick-idade').value = ''; 
+        document.getElementById('modal-idade').classList.remove('hidden'); 
+    }
 }
 function buscarCEPHeader() {
     const val = document.getElementById('quick-cep').value;
@@ -202,7 +206,7 @@ async function buscarCEP() {
     } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na conexão', 'error'); }
 }
 
-function calcularIdade() {
+function calcularDatas() {
     const val = document.getElementById('nasc-input').value;
     if(val.length !== 10) return Swal.fire('Data incompleta', 'Formato DD/MM/AAAA', 'warning');
     
@@ -211,22 +215,36 @@ function calcularIdade() {
     const hoje = new Date(); 
     dNasc.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
     
-    if (isNaN(dNasc.getTime()) || dNasc > hoje) return Swal.fire('Erro', 'Data inválida ou futura', 'warning');
+    if (isNaN(dNasc.getTime())) return Swal.fire('Erro', 'Data inválida', 'error');
+    if (dNasc > hoje) return Swal.fire('Erro', 'A data não pode ser futura', 'warning');
     
+    const diffTime = Math.abs(hoje - dNasc);
+    const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
     let anos = hoje.getFullYear() - dNasc.getFullYear();
     let meses = hoje.getMonth() - dNasc.getMonth();
-    let dias = hoje.getDate() - dNasc.getDate();
+    let diasRestantes = hoje.getDate() - dNasc.getDate();
 
-    if (dias < 0) { meses--; dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate(); }
-    if (meses < 0) { anos--; meses += 12; }
+    if (diasRestantes < 0) {
+        meses--;
+        diasRestantes += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate();
+    }
+    if (meses < 0) {
+        anos--;
+        meses += 12;
+    }
     
-    const totalDias = Math.floor((hoje - dNasc) / (1000 * 60 * 60 * 24));
+    // Calcula Semanas e Dias Finais
+    const semanas = Math.floor(diasRestantes / 7);
+    const diasFinais = diasRestantes % 7;
+    
+    document.getElementById('data-nasc-display').innerText = val;
+    document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
     
     document.getElementById('res-anos').innerText = anos;
     document.getElementById('res-meses').innerText = meses;
-    document.getElementById('res-dias').innerText = dias;
-    document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
-    document.getElementById('data-nasc-display').innerText = `Nascido(a) em: ${val}`;
+    document.getElementById('res-semanas').innerText = semanas;
+    document.getElementById('res-dias').innerText = diasFinais;
     
     document.getElementById('idade-resultado-box').classList.remove('hidden');
 }
