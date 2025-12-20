@@ -13,11 +13,8 @@ async function carregarDashboard() {
     try {
         exibirCarregando();
         
-        // 1. BUSCAR NOMES REAIS (O Segredo para não mostrar IDs)
-        // Buscamos todos os usuários para traduzir "username" -> "Nome Completo"
+        // 1. BUSCAR NOMES REAIS
         const { data: usuariosData } = await _supabase.from('usuarios').select('username, nome');
-        
-        // Cria um mapa rápido: { 'joao.silva': 'João Silva', 'maria': 'Maria Souza' }
         const mapaNomes = {};
         if (usuariosData) {
             usuariosData.forEach(u => {
@@ -26,6 +23,7 @@ async function carregarDashboard() {
         }
 
         // 2. CONSULTAS AO BANCO
+        
         // A. Top 5 Frases Mais Usadas
         const { data: topFrases } = await _supabase
             .from('frases')
@@ -33,13 +31,14 @@ async function carregarDashboard() {
             .order('usos', { ascending: false })
             .limit(5);
 
-        // B. Top 5 Menos Usadas (>= 10 usos)
-        const { data: lowFrases } = await _supabase
+        // B. Top 5 Menos Usadas (Lógica Corrigida)
+        // Buscamos um pouco mais (20) para poder filtrar as duplicadas no JS
+        const { data: lowCandidates } = await _supabase
             .from('frases')
             .select('*')
-            .gte('usos', 10) 
+            .gt('usos', 0) // MUDEI AQUI: > 0 (Pelo menos 1 uso). Se quiser >10, coloque 10.
             .order('usos', { ascending: true })
-            .limit(5);
+            .limit(30);
 
         // C. Frases Inativas (90 Dias)
         const dataCorte = new Date();
@@ -51,7 +50,7 @@ async function carregarDashboard() {
             .or(`ultimo_uso.lt.${dataCorte.toISOString()},ultimo_uso.is.null`)
             .order('ultimo_uso', { ascending: true });
 
-        // D. Ranking de Usuários (Logs)
+        // D. Ranking de Usuários
         const { data: logsUsuarios } = await _supabase
             .from('logs')
             .select('usuario');
@@ -59,9 +58,19 @@ async function carregarDashboard() {
         // E. Totalizadores
         const { count: totalFrases } = await _supabase.from('frases').select('*', { count: 'exact', head: true });
         
-        // 3. PROCESSAMENTO COM NOMES REAIS
-        // Passamos o mapaNomes para a função de processamento
+        // 3. PROCESSAMENTO INTELIGENTE (Anti-Duplicidade)
+        
+        // Processa Usuários
         const rankingUsuarios = processarRankingUsuarios(logsUsuarios, mapaNomes);
+        
+        // Processa Frases (Remove do LOW quem já está no TOP)
+        const topLista = topFrases || [];
+        const idsTop = topLista.map(f => f.id);
+        
+        const lowLista = (lowCandidates || [])
+            .filter(f => !idsTop.includes(f.id)) // AQUI ESTÁ A CORREÇÃO: Remove quem já é Top
+            .slice(0, 5); // Pega apenas os 5 primeiros que sobraram
+
         const totalUsosGerais = logsUsuarios ? logsUsuarios.length : 0;
 
         // 4. RENDERIZAÇÃO
@@ -70,9 +79,9 @@ async function carregarDashboard() {
         renderizarTabelaUsuarios(rankingUsuarios.top5, 'lista-top-users', 'green');
         renderizarTabelaUsuarios(rankingUsuarios.bottom5, 'lista-bottom-users', 'gray');
         
-        renderizarTopFrases(topFrases || [], 'lista-top-frases');
-        renderizarLowFrases(lowFrases || [], 'lista-low-frases');
-        renderizarFrasesSemUso(semUso90d || [], mapaNomes); // Passamos os nomes aqui também
+        renderizarTopFrases(topLista, 'lista-top-frases');
+        renderizarLowFrases(lowLista, 'lista-low-frases');
+        renderizarFrasesSemUso(semUso90d || [], mapaNomes);
 
         // Realtime
         if (!dashboardSubscription) {
@@ -86,7 +95,6 @@ async function carregarDashboard() {
     }
 }
 
-// Helper atualizado para aceitar o mapa de nomes
 function processarRankingUsuarios(logs, mapaNomes) {
     if(!logs) return { top5: [], bottom5: [], all: [] };
     
@@ -97,16 +105,28 @@ function processarRankingUsuarios(logs, mapaNomes) {
 
     const arrayUsers = Object.entries(contagem).map(([user, qtd]) => ({
         username: user,
-        // AQUI ESTÁ A MÁGICA: Tenta pegar o nome real, se não tiver, usa o user formatado
         nome: mapaNomes[user] || formatarNomeUser(user), 
         qtd: qtd
     }));
 
     arrayUsers.sort((a, b) => b.qtd - a.qtd);
 
+    // Mesma lógica de exclusão para usuários (se tiver poucos usuários)
+    const top5 = arrayUsers.slice(0, 5);
+    const topUsersIds = top5.map(u => u.username);
+    
+    // Bottom 5 removendo quem já está no Top 5 (evita repetir nomes se tiver pouca gente)
+    let bottom5 = [...arrayUsers].reverse().filter(u => !topUsersIds.includes(u.username)).slice(0, 5);
+    
+    // Se a equipe for muito pequena (ex: 3 pessoas), o bottom ficaria vazio com a regra acima.
+    // Nesse caso, liberamos a repetição para não mostrar tabela vazia.
+    if(arrayUsers.length < 10 && bottom5.length === 0) {
+         bottom5 = [...arrayUsers].reverse().slice(0, 5);
+    }
+
     return {
-        top5: arrayUsers.slice(0, 5),
-        bottom5: [...arrayUsers].reverse().slice(0, 5),
+        top5: top5,
+        bottom5: bottom5,
         all: arrayUsers
     };
 }
@@ -139,7 +159,7 @@ function renderizarKPIs(stats) {
 function renderizarTabelaUsuarios(lista, elementId, corTheme) {
     const tbody = document.getElementById(elementId);
     if (!tbody) return;
-    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Sem dados</td></tr>'; return; }
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Dados insuficientes para ranking reverso.</td></tr>'; return; }
 
     tbody.innerHTML = lista.map((u, i) => `
         <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition">
@@ -191,7 +211,7 @@ function renderizarTopFrases(lista, elementId) {
 function renderizarLowFrases(lista, elementId) {
     const tbody = document.getElementById(elementId);
     if (!tbody) return;
-    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Nenhuma frase >10 usos.</td></tr>'; return; }
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Nenhuma frase encontrada (com pelo menos 1 uso) fora do Top 5.</td></tr>'; return; }
 
     tbody.innerHTML = lista.map((f, i) => `
         <tr class="border-b border-slate-50 hover:bg-orange-50/20 transition">
@@ -224,7 +244,6 @@ function renderizarFrasesSemUso(lista, mapaNomes) {
             diasSemUso = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + " dias";
         }
 
-        // Descobre o nome do criador
         const nomeCriador = mapaNomes[f.revisado_por] || f.revisado_por || 'Sistema';
 
         return `
