@@ -1,8 +1,16 @@
+// Local: js/app.js
+
+// CONFIGURAÇÃO DO SUPABASE (Já inserida)
 const SUPABASE_URL = 'https://urmwvabkikftsefztadb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVybXd2YWJraWtmdHNlZnp0YWRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjUxNjU1NjQsImV4cCI6MjA4MDc0MTU2NH0.SXR6EG3fIE4Ya5ncUec9U2as1B7iykWZhZWN1V5b--E';
+
+// Inicializa o cliente globalmente (acessível por dashboard.js e biblioteca.js)
 const _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let usuarioLogado = null, abaAtiva = 'biblioteca', chatAberto = false, debounceTimer;
+let usuarioLogado = null;
+let abaAtiva = 'biblioteca';
+let chatAberto = false;
+let debounceTimer;
 let cacheNomesChat = {}; 
 
 window.onload = function() { 
@@ -28,10 +36,12 @@ window.onload = function() {
 };
 
 async function fazerLogin() {
-    const u = document.getElementById('login-user').value; const p = document.getElementById('login-pass').value;
+    const u = document.getElementById('login-user').value; 
+    const p = document.getElementById('login-pass').value;
     try { 
         const { data, error } = await _supabase.from('usuarios').select('*').eq('username', u).eq('senha', p);
         if (error) return Swal.fire('Erro', error.message, 'error');
+        
         if (data && data.length) { 
             const usuario = data[0];
             if (usuario.ativo === false) return Swal.fire('Bloqueado', 'Conta inativada.', 'error');
@@ -84,10 +94,15 @@ function entrarNoSistema() {
 }
 
 async function atualizarSenhaPrimeiroAcesso() {
-    const s1 = document.getElementById('new-password').value; const s2 = document.getElementById('confirm-password').value;
+    const s1 = document.getElementById('new-password').value; 
+    const s2 = document.getElementById('confirm-password').value;
     if(s1.length < 4 || s1 !== s2) return Swal.fire('Erro', 'Senhas inválidas', 'warning');
+    
     await _supabase.from('usuarios').update({senha: s1, primeiro_acesso: false}).eq('id', usuarioLogado.id);
-    usuarioLogado.primeiro_acesso = false; localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); document.getElementById('first-access-modal').classList.add('hidden'); entrarNoSistema();
+    usuarioLogado.primeiro_acesso = false; 
+    localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
+    document.getElementById('first-access-modal').classList.add('hidden'); 
+    entrarNoSistema();
 }
 
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
@@ -107,10 +122,14 @@ function navegar(pagina) {
     if (usuarioLogado.perfil !== 'admin' && (pagina === 'logs' || pagina === 'equipe' || pagina === 'dashboard')) pagina = 'biblioteca';
     abaAtiva = pagina;
     
+    // Esconde todas as sections
     document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden')); 
+    
+    // Mostra a selecionada
     const targetView = document.getElementById(`view-${pagina}`);
     if(targetView) targetView.classList.remove('hidden');
     
+    // Filtros e Botões
     const filterBar = document.getElementById('filter-bar');
     if(filterBar) filterBar.classList.toggle('hidden', pagina !== 'biblioteca' && pagina !== 'equipe' && pagina !== 'logs');
     
@@ -138,16 +157,16 @@ function debounceBusca() {
     clearTimeout(debounceTimer); 
     debounceTimer = setTimeout(() => {
         const termo = document.getElementById('global-search').value.toLowerCase();
-        if (abaAtiva === 'biblioteca') aplicarFiltros();
-        if (abaAtiva === 'equipe') filtrarEquipe(termo);
-        if (abaAtiva === 'logs') filtrarLogs(termo);
+        if (abaAtiva === 'biblioteca' && typeof aplicarFiltros === 'function') aplicarFiltros();
+        if (abaAtiva === 'equipe' && typeof filtrarEquipe === 'function') filtrarEquipe(termo);
+        if (abaAtiva === 'logs' && typeof filtrarLogs === 'function') filtrarLogs(termo);
     }, 300); 
 }
 
+// Utils (Idade, CEP, Texto)
 function normalizar(t) { return t ? t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") : ""; }
 function formatarTextoBonito(t, tipo) { if (!t) return ""; let l = t.trim().replace(/\s+/g, ' '); if (tipo === 'titulo') return l.toLowerCase().replace(/(?:^|\s)\S/g, a => a.toUpperCase()); return l.charAt(0).toUpperCase() + l.slice(1); }
 
-// UTILS HEADER
 function calcularIdadeHeader() {
     const val = document.getElementById('quick-idade').value;
     if(val.length === 10) { document.getElementById('nasc-input').value = val; calcularIdade(); document.getElementById('quick-idade').value = ''; document.getElementById('modal-idade').classList.remove('hidden'); }
@@ -174,14 +193,12 @@ function calcularIdade() {
     if(parts.length !== 3) return Swal.fire('Erro', 'Data inválida', 'warning');
     const dNasc = new Date(parts[2], parts[1]-1, parts[0]);
     const hoje = new Date(); dNasc.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
-    
     if (dNasc > hoje) return Swal.fire('Erro', 'Data futura', 'warning');
-
+    
     const totalDias = Math.ceil(Math.abs(hoje - dNasc) / (1000 * 60 * 60 * 24));
     let anos = hoje.getFullYear() - dNasc.getFullYear();
     let meses = hoje.getMonth() - dNasc.getMonth();
     let dias = hoje.getDate() - dNasc.getDate();
-
     if (dias < 0) { meses--; dias += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate(); }
     if (meses < 0) { anos--; meses += 12; }
 
@@ -197,6 +214,7 @@ function calcularIdade() {
 function mascaraData(i) { let v = i.value.replace(/\D/g, ""); if(v.length>2) v=v.substring(0,2)+"/"+v.substring(2); if(v.length>5) v=v.substring(0,5)+"/"+v.substring(5,9); i.value = v; }
 function fecharModalCEP() { document.getElementById('modal-cep').classList.add('hidden'); }
 function fecharModalIdade() { document.getElementById('modal-idade').classList.add('hidden'); }
+function fecharModalFrase() { document.getElementById('modal-frase').classList.add('hidden'); }
 function fecharModalUsuario() { document.getElementById('modal-usuario').classList.add('hidden'); }
 
 // CHAT
