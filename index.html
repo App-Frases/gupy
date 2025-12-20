@@ -22,6 +22,7 @@
         .nav-item:hover { background-color: #334155; color: white; }
         .active-nav { background-color: #2563eb; color: white; }
         
+        /* Scrollbars Personalizadas */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
@@ -36,6 +37,7 @@
             -webkit-appearance: none; appearance: none;
         }
         
+        /* Animações */
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
         
@@ -214,6 +216,45 @@
         </div>
     </div>
 
+    <div id="modal-log-detalhe" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
+            <div id="header-modal-log" class="bg-slate-800 p-6 text-white flex justify-between items-center shadow-lg">
+                <div class="flex items-center gap-3">
+                    <div id="modal-log-icon" class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg"></div>
+                    <div>
+                        <h3 id="modal-log-titulo" class="font-extrabold text-lg leading-tight">Detalhes</h3>
+                        <p id="modal-log-data" class="text-xs text-slate-300 font-mono opacity-80">--/--/----</p>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('modal-log-detalhe').classList.add('hidden')" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+
+            <div class="p-6 space-y-4">
+                <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm" id="modal-log-avatar">U</div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Usuário</p>
+                        <p id="modal-log-user" class="font-bold text-slate-700 text-sm">Nome do Usuário</p>
+                    </div>
+                    <div id="modal-log-badge"></div>
+                </div>
+
+                <div>
+                    <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2 ml-1">Detalhes da Ação</p>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm text-slate-600 font-medium leading-relaxed max-h-60 overflow-y-auto custom-scrollbar" id="modal-log-desc">
+                        ---
+                    </div>
+                </div>
+
+                <button onclick="document.getElementById('modal-log-detalhe').classList.add('hidden')" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 rounded-xl transition">
+                    Fechar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <div id="app-flow" class="hidden flex flex-col h-screen">
         <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
             <div class="container mx-auto px-6 h-full flex items-center justify-between">
@@ -267,7 +308,7 @@
                 <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2 shrink-0"><i class="fas fa-filter mr-1"></i> Filtros:</span>
                 <select id="filtro-empresa" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">🏢 Empresas</option></select>
                 <select id="filtro-motivo" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">🎯 Motivos</option></select>
-                <select id="filtro-doc" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">📄 Docs</option></select>
+                <select id="filtro-doc" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">📄 Documentos</option></select>
                 <button onclick="limparFiltros()" class="text-xs font-bold text-red-400 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition"><i class="fas fa-times mr-1"></i> Limpar</button>
                 <div class="w-px h-6 bg-slate-200 mx-2 shrink-0"></div>
                 
@@ -279,105 +320,24 @@
 
         <main class="flex-1 overflow-y-auto bg-slate-100 p-6">
             <div class="container mx-auto max-w-7xl h-full flex flex-col">
+                
                 <section id="view-biblioteca" class="view-section flex-grow">
                     <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full pb-20"></div>
                 </section>
+
                 <section id="view-dashboard" class="view-section hidden flex-grow space-y-6">
-                    <div id="painel-dashboard" class="space-y-6">
-                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                                <div class="flex justify-between items-start">
-                                    <div>
-                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Interações</p>
-                                        <p class="text-2xl font-black text-blue-600 mt-1" id="kpi-total-usos">0</p>
-                                    </div>
-                                    <div class="bg-blue-50 text-blue-500 p-2 rounded-lg text-lg"><i class="fas fa-chart-line"></i></div>
-                                </div>
-                            </div>
-                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                                <div class="flex justify-between items-start">
-                                    <div>
-                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Frases Ativas</p>
-                                        <p class="text-2xl font-black text-slate-700 mt-1" id="kpi-frases-ativas">0</p>
-                                    </div>
-                                    <div class="bg-slate-100 text-slate-500 p-2 rounded-lg text-lg"><i class="fas fa-database"></i></div>
-                                </div>
-                            </div>
-                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                                <div class="flex justify-between items-start">
-                                    <div>
-                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sem Uso (90d)</p>
-                                        <div id="contador-sem-uso" class="text-2xl font-black text-green-500 mt-1">0</div>
-                                    </div>
-                                    <div class="bg-orange-50 text-orange-500 p-2 rounded-lg text-lg"><i class="fas fa-stopwatch"></i></div>
-                                </div>
-                            </div>
-                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                                <div class="flex justify-between items-start">
-                                    <div>
-                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Membros</p>
-                                        <p class="text-2xl font-black text-purple-600 mt-1" id="kpi-total-users">0</p>
-                                    </div>
-                                    <div class="bg-purple-50 text-purple-500 p-2 rounded-lg text-lg"><i class="fas fa-users"></i></div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
-                                    <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-trophy mr-2 text-yellow-500"></i>Top 5 Mais Ativos</h3>
-                                </div>
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-left"><tbody id="lista-top-users"></tbody></table>
-                                </div>
-                            </div>
-                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
-                                    <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-user-clock mr-2 text-slate-400"></i>Top 5 Menos Ativos</h3>
-                                </div>
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-left"><tbody id="lista-bottom-users"></tbody></table>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50">
-                                    <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-fire mr-2 text-red-500"></i>Frases Mais Utilizadas</h3>
-                                </div>
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-left"><tbody id="lista-top-frases"></tbody></table>
-                                </div>
-                            </div>
-                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50">
-                                    <h3 class="font-bold text-slate-700 text-sm" title="Frases com pelo menos 1 uso"><i class="fas fa-battery-quarter mr-2 text-orange-400"></i>Frases Menos Usadas</h3>
-                                </div>
-                                <div class="overflow-x-auto">
-                                    <table class="w-full text-left"><tbody id="lista-low-frases"></tbody></table>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-10">
-                            <div class="px-6 py-4 border-b border-slate-50 bg-red-50/30 flex justify-between items-center">
-                                <h3 class="font-bold text-red-700 text-sm"><i class="fas fa-archive mr-2"></i>Zona de Esquecimento (Sem uso há 90+ dias)</h3>
-                            </div>
-                            <div class="overflow-x-auto max-h-96 custom-scrollbar">
-                                <table class="w-full text-left"><tbody id="lista-frases-sem-uso"></tbody></table>
-                            </div>
-                        </div>
-                    </div>
+                    <div id="painel-dashboard" class="space-y-6"></div>
                 </section>
+
                 <section id="view-logs" class="view-section hidden flex-grow space-y-6">
                     <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
                 </section>
+
                 <section id="view-equipe" class="view-section hidden flex-grow">
                     <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8" id="lista-equipe-container"></div>
                     <div class="bg-white rounded-2xl shadow-sm border border-red-100 p-6"><h4 class="text-sm font-extrabold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-database text-red-400"></i> Dados</h4><div class="flex gap-4"><button onclick="baixarBackup()" class="flex-1 bg-slate-50 border border-slate-200 font-bold py-3 rounded-xl text-xs hover:bg-slate-100">Baixar Backup</button></div></div>
                 </section>
+                
                 <footer class="mt-auto pt-6 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-4">Desenvolvido por Pedro Gabriel</footer>
             </div>
         </main>
