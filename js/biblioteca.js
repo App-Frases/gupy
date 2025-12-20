@@ -5,20 +5,21 @@ let cacheFrases = [];
 async function carregarFrases() {
     try {
         const container = document.getElementById('grid-frases');
-        if(container) container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando biblioteca personalizada...</div>';
+        if(container) container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando biblioteca...</div>';
 
-        // 1. Busca TODAS as frases (Dados Globais)
+        // 1. Busca Global
         const { data: frasesGlobais, error: erroFrases } = await _supabase
             .from('frases')
             .select('*');
         
         if (erroFrases) throw erroFrases;
 
-        // 2. Busca MEUS USOS via LOGS (Usando a View que criamos)
+        // 2. Busca Pessoal (Para Colaboradores)
         let meusUsosMap = {};
+        // Só buscamos os stats pessoais se NÃO for admin ou se quisermos manter o dado guardado
         if (usuarioLogado) {
             const { data: meusStats, error: erroStats } = await _supabase
-                .from('view_usos_pessoais') // <--- Lê direto da View baseada em Logs
+                .from('view_usos_pessoais') 
                 .select('frase_id, qtd_uso')
                 .eq('usuario', usuarioLogado.username);
             
@@ -29,18 +30,24 @@ async function carregarFrases() {
             }
         }
 
-        // 3. Mescla e Ordena
+        // 3. Mescla
         cacheFrases = (frasesGlobais || []).map(f => ({
             ...f,
-            meus_usos: meusUsosMap[f.id] || 0, // Se não tiver log, é 0
+            meus_usos: meusUsosMap[f.id] || 0,
             _busca: normalizar(f.conteudo + f.empresa + f.motivo + f.documento)
         }));
 
-        // ORDENAÇÃO INTELIGENTE (Prioriza uso pessoal)
-        cacheFrases.sort((a, b) => {
-            if (b.meus_usos !== a.meus_usos) return b.meus_usos - a.meus_usos;
-            return (b.usos || 0) - (a.usos || 0);
-        });
+        // 4. ORDENAÇÃO CONDICIONAL (A MUDANÇA ESTÁ AQUI)
+        if (usuarioLogado.perfil === 'admin') {
+            // ADMIN: Ordena puramente pelo uso GLOBAL (Total da Empresa)
+            cacheFrases.sort((a, b) => (b.usos || 0) - (a.usos || 0));
+        } else {
+            // COLABORADOR: Prioriza o uso PESSOAL
+            cacheFrases.sort((a, b) => {
+                if (b.meus_usos !== a.meus_usos) return b.meus_usos - a.meus_usos;
+                return (b.usos || 0) - (a.usos || 0); // Desempate global
+            });
+        }
         
         aplicarFiltros('inicio');
     } catch (e) {
@@ -57,20 +64,26 @@ async function copiarTexto(id) {
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
-        // 1. O LOG É O SEGREDO: Ao registrar o log, a View 'view_usos_pessoais' atualiza sozinha!
         await registrarLog('COPIAR', String(id)); 
 
-        // 2. Atualiza Global (apenas para manter o dashboard admin rápido)
         const novoUsoGlobal = (f.usos || 0) + 1;
         const agora = new Date().toISOString();
         _supabase.from('frases').update({ usos: novoUsoGlobal, ultimo_uso: agora }).eq('id', id).then();
 
-        // 3. Atualiza Visualmente (Sem recarregar tudo)
+        // Atualiza objetos locais
         f.usos = novoUsoGlobal;
-        f.meus_usos = (f.meus_usos || 0) + 1; // Incrementa localmente para feedback instantâneo
+        f.meus_usos = (f.meus_usos || 0) + 1;
 
+        // Atualiza visualmente APENAS o card clicado
         const elContador = document.querySelector(`#card-frase-${id} .contador-usos`);
-        if(elContador) elContador.innerHTML = `<i class="fas fa-user-check mr-1 text-blue-500"></i>${f.meus_usos} vezes usado por mim`;
+        if(elContador) {
+            // Reaplica a lógica visual para garantir consistência
+            if (usuarioLogado.perfil === 'admin') {
+                elContador.innerHTML = `<i class="fas fa-chart-line mr-1 text-blue-600"></i> ${f.usos} usos na empresa`;
+            } else {
+                elContador.innerHTML = `<i class="fas fa-user-check mr-1 text-blue-500"></i> ${f.meus_usos} vezes usado por mim`;
+            }
+        }
     }); 
 }
 
@@ -90,7 +103,6 @@ function aplicarFiltros(origem) {
 
     if (termo) base = base.filter(f => f._busca.includes(termo));
 
-    // Lógica para filtrar opções dos selects dinamicamente
     const optsEmpresa = base.filter(f => (valMotivo ? f.motivo === valMotivo : true) && (valDoc ? f.documento === valDoc : true));
     const optsMotivo = base.filter(f => (valEmpresa ? f.empresa === valEmpresa : true) && (valDoc ? f.documento === valDoc : true));
     const optsDoc = base.filter(f => (valEmpresa ? f.empresa === valEmpresa : true) && (valMotivo ? f.motivo === valMotivo : true));
@@ -105,7 +117,7 @@ function aplicarFiltros(origem) {
         (valDoc ? f.documento === valDoc : true)
     );
     
-    // Se não tiver filtro, mostra Top 4 (baseado na ordenação pessoal carregada no início)
+    // Se não tem filtro, pega os Top 4 (já ordenados corretamente no carregarFrases)
     const listaFinal = !temFiltro ? filtrados.slice(0, 4) : filtrados;
 
     renderizarBiblioteca(listaFinal, !temFiltro); 
@@ -129,15 +141,23 @@ function renderizarBiblioteca(lista, isTop4) {
         const idSafe = f.id;
         const objSafe = JSON.stringify(f).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         
-        // VISUALIZAÇÃO HÍBRIDA DO CONTADOR
+        // --- VISUALIZAÇÃO DIFERENCIADA (ADMIN vs COLAB) ---
         let textoContador;
         let iconeContador;
-        if (f.meus_usos > 0) {
-            textoContador = `${f.meus_usos} vezes usado por mim`;
-            iconeContador = "fa-user-check text-blue-500";
-        } else {
+
+        if (usuarioLogado.perfil === 'admin') {
+            // ADMIN: Vê sempre o total da empresa
             textoContador = `${f.usos || 0} usos na empresa`;
-            iconeContador = "fa-globe text-slate-400";
+            iconeContador = "fa-chart-line text-blue-600";
+        } else {
+            // COLABORADOR: Vê o seu uso (ou global se for zero)
+            if (f.meus_usos > 0) {
+                textoContador = `${f.meus_usos} vezes usado por mim`;
+                iconeContador = "fa-user-check text-blue-500";
+            } else {
+                textoContador = `${f.usos || 0} usos na empresa`;
+                iconeContador = "fa-globe text-slate-400";
+            }
         }
 
         return `
@@ -168,7 +188,7 @@ function renderizarBiblioteca(lista, isTop4) {
     grid.innerHTML = cards;
 }
 
-// --- UTIL: SUGESTÕES DE AUTOCOMPLETAR ---
+// --- SUGESTÕES DE AUTOCOMPLETAR ---
 function atualizarSugestoesModal() {
     const preencher = (idLista, chave) => {
         const lista = document.getElementById(idLista);
@@ -181,7 +201,7 @@ function atualizarSugestoesModal() {
     preencher('list-docs', 'documento');
 }
 
-// --- CRUD PADRÃO ---
+// --- CRUD ---
 function abrirModalFrase() { 
     document.getElementById('id-frase').value=''; 
     document.getElementById('inp-conteudo').value=''; 
@@ -213,7 +233,7 @@ async function salvarFrase() {
     const rawConteudo = document.getElementById('inp-conteudo').value;
 
     if (!rawEmpresa || !rawMotivo || !rawDoc || !rawConteudo.trim()) {
-        return Swal.fire({title: 'Atenção', text: 'Preencha todos os campos.', icon: 'warning'});
+        return Swal.fire({title: 'Campos Obrigatórios', text: 'Por favor, preencha todos os campos.', icon: 'warning', confirmButtonColor: '#3b82f6'});
     }
     
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
