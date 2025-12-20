@@ -101,13 +101,15 @@ async function atualizarSenhaPrimeiroAcesso() {
 
 function logout() { localStorage.removeItem('gupy_session'); location.reload(); }
 
+// --- LOGGING AUTOMÁTICO (CORRIGIDO) ---
 async function registrarLog(acao, detalhe) { 
     if(usuarioLogado) {
+        // NÃO enviamos mais data_hora aqui. 
+        // O Supabase gera automaticamente com 'now()', garantindo a hora certa do servidor.
         await _supabase.from('logs').insert([{
             usuario: usuarioLogado.username, 
-            acao, 
-            detalhe,
-            data_hora: new Date().toISOString()
+            acao: acao, 
+            detalhe: detalhe
         }]); 
     }
 }
@@ -218,6 +220,7 @@ function calcularDatas() {
     if (isNaN(dNasc.getTime())) return Swal.fire('Erro', 'Data inválida', 'error');
     if (dNasc > hoje) return Swal.fire('Erro', 'A data não pode ser futura', 'warning');
     
+    // Cálculo Matemático
     const diffTime = Math.abs(hoje - dNasc);
     const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
@@ -238,6 +241,7 @@ function calcularDatas() {
     const semanas = Math.floor(diasRestantes / 7);
     const diasFinais = diasRestantes % 7;
     
+    // Atualiza Visual
     document.getElementById('data-nasc-display').innerText = val;
     document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
     
