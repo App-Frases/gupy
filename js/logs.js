@@ -1,7 +1,7 @@
 // Local: js/logs.js
 
 let logsSubscription = null;
-let listaLogsAtual = []; // Armazena os dados para abrir no modal
+let listaLogsAtual = []; // Essencial para o modal funcionar
 
 async function carregarLogs() {
     const container = document.getElementById('container-logs-agrupados');
@@ -23,7 +23,7 @@ async function carregarLogs() {
             throw error;
         }
 
-        listaLogsAtual = logs; // Salva na memória global
+        listaLogsAtual = logs; // Salva para uso no Modal
         renderizarLogs(logs);
 
         if (!logsSubscription) {
@@ -61,7 +61,6 @@ function renderizarLogs(lista) {
         });
         
         if(!grupos[dataExtensa]) grupos[dataExtensa] = [];
-        // Adicionamos o índice original para saber qual abrir no modal
         grupos[dataExtensa].push({ ...log, indexOriginal: index });
     });
 
@@ -101,9 +100,7 @@ function criarCardLog(log) {
     const cfg = configs[log.acao] || { cor: 'slate', bg: 'bg-slate-50', icon: 'fa-info', texto: log.acao };
     
     const nome = log.nome_real || log.username || 'Sistema';
-    const iniciais = nome.substring(0, 2).toUpperCase();
     
-    // Resumo do detalhe para o card
     let resumoDetalhe = 'Clique para ver detalhes';
     if(log.detalhe) {
         if(!isNaN(log.detalhe)) resumoDetalhe = `Frase ID #${log.detalhe}`;
@@ -113,9 +110,7 @@ function criarCardLog(log) {
     return `
     <div onclick="abrirModalLog(${log.indexOriginal})" 
          class="group bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-${cfg.cor}-200 transition-all duration-300 cursor-pointer relative overflow-hidden">
-        
         <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-${cfg.cor}-500"></div>
-
         <div class="flex justify-between items-start mb-3 pl-3">
             <div class="flex items-center gap-2">
                 <div class="w-8 h-8 rounded-full ${cfg.bg} text-${cfg.cor}-600 flex items-center justify-center border border-${cfg.cor}-100">
@@ -128,19 +123,16 @@ function criarCardLog(log) {
             </div>
             <span class="text-[10px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">${horaLocal}</span>
         </div>
-
         <div class="pl-3">
             <p class="text-xs text-slate-500 font-medium truncate bg-slate-50 p-2 rounded-lg border border-slate-50 group-hover:bg-white group-hover:border-${cfg.cor}-100 transition-colors">
                 ${resumoDetalhe}
             </p>
         </div>
-
         <span class="hidden">${log.detalhe} ${log.username} ${log.acao}</span>
     </div>
     `;
 }
 
-// --- FUNÇÃO PARA ABRIR O MODAL ---
 function abrirModalLog(index) {
     const log = listaLogsAtual[index];
     if(!log) return;
@@ -148,7 +140,6 @@ function abrirModalLog(index) {
     const dataObj = new Date(log.data_hora);
     const dataFormatada = dataObj.toLocaleDateString('pt-BR') + ' às ' + dataObj.toLocaleTimeString('pt-BR');
 
-    // Configuração de Cores/Icones (Repetida para o modal)
     const configs = {
         'LOGIN': { cor: 'blue', titulo: 'Acesso ao Sistema', icon: 'fa-sign-in-alt' },
         'COPIAR': { cor: 'emerald', titulo: 'Cópia de Frase', icon: 'fa-copy' },
@@ -160,16 +151,13 @@ function abrirModalLog(index) {
     };
     const cfg = configs[log.acao] || { cor: 'slate', titulo: log.acao, icon: 'fa-info' };
 
-    // Preenche o Modal
     const header = document.getElementById('header-modal-log');
-    // Remove cores antigas e adiciona nova (via style para garantir ou classes tailwind se preferir)
     header.className = `p-6 text-white flex justify-between items-center shadow-lg bg-${cfg.cor}-600`;
     
     document.getElementById('modal-log-titulo').innerText = cfg.titulo;
     document.getElementById('modal-log-icon').innerHTML = `<i class="fas ${cfg.icon}"></i>`;
     document.getElementById('modal-log-data').innerText = dataFormatada;
     
-    // Usuário
     const nome = log.nome_real || log.username;
     document.getElementById('modal-log-user').innerText = nome;
     document.getElementById('modal-log-avatar').innerText = nome.charAt(0).toUpperCase();
@@ -179,20 +167,16 @@ function abrirModalLog(index) {
         ? `<span class="bg-yellow-400 text-yellow-900 text-[10px] font-black px-2 py-1 rounded shadow-sm">ADMIN</span>`
         : `<span class="bg-slate-200 text-slate-600 text-[10px] font-bold px-2 py-1 rounded">COLAB</span>`;
 
-    // Detalhe
     let textoDetalhe = log.detalhe;
     if(!isNaN(log.detalhe)) textoDetalhe = `Interação com a frase de ID: #${log.detalhe}`;
     
     document.getElementById('modal-log-desc').innerText = textoDetalhe || 'Sem detalhes adicionais.';
-
-    // Abre
     document.getElementById('modal-log-detalhe').classList.remove('hidden');
 }
 
 function filtrarLogs(termo) {
     const cards = document.querySelectorAll('#container-logs-agrupados .group');
     cards.forEach(card => {
-        // Busca no innerText (que inclui o span hidden)
         if(card.innerText.toLowerCase().includes(termo)) card.classList.remove('hidden');
         else card.classList.add('hidden');
     });
