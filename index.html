@@ -1,389 +1,305 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gupy Frases - Painel Administrativo</title>
+    <title>Frases de Recusa - Gupy</title>
+    
+    <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
     
     <script src="https://cdn.tailwindcss.com"></script>
-    
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
     <style>
-        /* Ajustes finos de scrollbar e fontes */
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .active-nav { background-color: #eff6ff; color: #2563eb; border-right: 3px solid #2563eb; }
+        body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; }
+        .nav-item.active { background-color: #2563eb; color: white; } /* Azul mais vibrante */
+        .nav-item { transition: all 0.2s; border-radius: 0.5rem; }
+        .nav-item:hover { background-color: #334155; color: white; }
         
-        /* Scrollbar personalizada sutil */
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        .header-select {
+            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+            background-position: right 0.5rem center;
+            background-repeat: no-repeat;
+            background-size: 1.2em 1.2em;
+            padding-right: 2rem;
+            -webkit-appearance: none; appearance: none;
+        }
         
-        /* Animações */
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        .animate-fade-in { animation: fadeIn 0.3s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        
+        .chat-widget { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: bottom right; }
+        .chat-open { transform: scale(1); opacity: 1; pointer-events: auto; }
+        .chat-closed { transform: scale(0.9); opacity: 0; pointer-events: none; display: none; }
+        
+        .dash-card { transition: transform 0.2s, box-shadow 0.2s; }
+        .dash-card:hover { transform: translateY(-3px); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1); }
+        
+        .quick-input { transition: all 0.2s; border: 1px solid #e2e8f0; }
+        .quick-input:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15); background: white; }
+        
+        /* Estilos extras para a tabela do dashboard */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
     </style>
 </head>
-<body class="h-screen flex overflow-hidden text-slate-600">
+<body class="h-screen overflow-hidden text-slate-800 bg-slate-50 flex flex-col">
 
-    <aside class="w-64 bg-white border-r border-slate-200 flex flex-col z-20 hidden md:flex">
-        <div class="h-16 flex items-center px-6 border-b border-slate-100">
-            <div class="font-black text-xl text-blue-600 tracking-tight">
-                <i class="fas fa-quote-right mr-2"></i>Gupy<span class="text-slate-700">Frases</span>
+    <div id="login-flow" class="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 absolute z-[100]">
+        <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md animate-fade-in">
+            <div class="text-center mb-8">
+                <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-quote-right text-3xl text-blue-600"></i></div>
+                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">Gupy Frases</h1><p class="text-base text-slate-500 mt-2 font-medium">Sistema Interno de Gestão</p>
+            </div>
+            <form onsubmit="event.preventDefault(); fazerLogin();">
+                <div class="mb-4"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Usuário</label><input type="text" id="login-user" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
+                <div class="mb-6"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha</label><input type="password" id="login-pass" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transform transition hover:-translate-y-1 text-lg">Acessar Sistema</button>
+            </form>
+            <div class="mt-8 text-center border-t border-slate-100 pt-4"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Desenvolvido por Pedro Gabriel</p></div>
+        </div>
+    </div>
+
+    <div id="first-access-modal" class="hidden fixed inset-0 bg-slate-900/80 z-[110] flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md text-center modal-content">
+            <h2 class="text-2xl font-bold mb-4">Nova Senha</h2>
+            <input type="password" id="new-password" placeholder="Nova Senha" class="w-full p-3 border rounded-xl mb-4">
+            <input type="password" id="confirm-password" placeholder="Confirmar" class="w-full p-3 border rounded-xl mb-6">
+            <button onclick="atualizarSenhaPrimeiroAcesso()" class="w-full bg-yellow-500 text-white font-bold py-3 rounded-xl">Salvar</button>
+        </div>
+    </div>
+    
+    <div id="modal-cep" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 p-4"><div class="bg-white rounded-3xl w-full max-w-md p-6"><input id="cep-input"><button onclick="buscarCEP()">Busca</button><div id="cep-resultado" class="hidden"><p id="cep-logradouro"></p><p id="cep-bairro"></p><p id="cep-localidade"></p><p id="cep-display-num"></p></div><div id="cep-loading" class="hidden">...</div><button onclick="fecharModalCEP()">X</button></div></div>
+    <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 p-4"><div class="bg-white rounded-3xl w-full max-w-lg p-6"><input id="nasc-input"><div id="idade-resultado-box"><p id="data-nasc-display"></p><span id="res-total-dias"></span><span id="res-anos"></span><span id="res-meses"></span><span id="res-semanas"></span><span id="res-dias"></span></div><button onclick="fecharModalIdade()">X</button></div></div>
+
+    <div id="modal-frase" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden modal-content relative">
+            <div class="bg-gray-50 px-8 py-5 border-b border-gray-100 flex justify-between items-center">
+                <h3 id="modal-title" class="text-xl font-extrabold text-gray-800 flex items-center gap-2"></h3>
+                <button onclick="fecharModalFrase()" class="text-gray-400 hover:text-red-500 transition text-xl"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="p-8">
+                <input type="hidden" id="id-frase">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Empresa</label><input id="inp-empresa" type="text" class="w-full p-3 border rounded-xl bg-gray-50 outline-none"></div>
+                    <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Motivo</label><input id="inp-motivo" type="text" class="w-full p-3 border rounded-xl bg-gray-50 outline-none"></div>
+                    <div><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Documento</label><input id="inp-doc" type="text" class="w-full p-3 border rounded-xl bg-gray-50 outline-none"></div>
+                </div>
+                <div class="mb-2"><label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Conteúdo</label><textarea id="inp-conteudo" rows="5" class="w-full p-4 border rounded-xl text-lg bg-gray-50 outline-none"></textarea></div>
+            </div>
+            <div class="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-3">
+                <button onclick="fecharModalFrase()" class="px-6 py-2 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-200">Cancelar</button>
+                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-xl font-bold shadow-lg">Salvar</button>
             </div>
         </div>
+    </div>
 
-        <nav class="flex-1 py-6 space-y-1 overflow-y-auto">
-            <button onclick="navegarPara('dashboard')" id="nav-dashboard" class="w-full flex items-center px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition group active-nav">
-                <i class="fas fa-chart-pie w-6 text-lg group-hover:scale-110 transition"></i>
-                Dashboard
-            </button>
-            
-            <button onclick="navegarPara('frases')" id="nav-frases" class="w-full flex items-center px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition group">
-                <i class="fas fa-list-alt w-6 text-lg group-hover:scale-110 transition"></i>
-                Gerenciar Frases
-            </button>
-            
-            <button onclick="navegarPara('equipe')" id="nav-equipe" class="w-full flex items-center px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition group">
-                <i class="fas fa-users w-6 text-lg group-hover:scale-110 transition"></i>
-                Equipe
-                <span id="contador-equipe" class="hidden ml-auto bg-blue-100 text-blue-600 py-0.5 px-2 rounded-full text-[10px]">0</span>
-            </button>
+    <div id="modal-usuario" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 p-4"><div class="bg-white rounded-3xl w-full max-w-md p-6"><input type="hidden" id="id-user-edit"><input type="checkbox" id="ativo-novo"><span id="label-ativo"></span><input id="nome-novo"><input id="user-novo"><input id="pass-novo"><select id="perfil-novo"><option value="user">User</option><option value="admin">Admin</option></select><button onclick="salvarUsuario()">Salvar</button><button onclick="fecharModalUsuario()">Cancelar</button><h3 id="modal-user-title"></h3></div></div>
 
-            <button onclick="navegarPara('logs')" id="nav-logs" class="w-full flex items-center px-6 py-3 text-sm font-bold text-slate-500 hover:bg-slate-50 hover:text-blue-600 transition group">
-                <i class="fas fa-history w-6 text-lg group-hover:scale-110 transition"></i>
-                Atividades
-            </button>
-        </nav>
-
-        <div class="p-4 border-t border-slate-100">
-            <div class="flex items-center gap-3 mb-4 px-2">
-                <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-xs" id="avatar-user">U</div>
-                <div>
-                    <p class="text-xs font-bold text-slate-700 truncate w-24" id="nome-usuario-logado">Carregando...</p>
-                    <p class="text-[10px] text-slate-400">Online</p>
+    <div id="app-flow" class="hidden flex flex-col h-screen">
+        <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
+            <div class="container mx-auto px-6 h-full flex items-center justify-between">
+                <div class="flex items-center gap-8">
+                    <div class="flex items-center gap-2 text-white cursor-pointer" onclick="navegar('biblioteca')">
+                        <i class="fas fa-quote-right text-blue-500 text-xl"></i>
+                        <span class="font-extrabold text-xl tracking-tight">Gupy<span class="text-blue-500">Frases</span></span>
+                    </div>
+                    <div class="hidden md:flex items-center gap-2">
+                        <button onclick="navegar('biblioteca')" id="menu-biblioteca" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-book-open mr-2"></i>Biblioteca</button>
+                        <div id="admin-menu-items" class="hidden flex gap-2 border-l border-slate-700 pl-2 ml-2">
+                            <button onclick="navegar('equipe')" id="menu-equipe" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-users-cog mr-2"></i>Equipe</button>
+                            <button onclick="navegar('logs')" id="menu-logs" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-history mr-2"></i>Logs</button>
+                            <button onclick="navegar('dashboard')" id="menu-dashboard" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-chart-pie mr-2"></i>Dashboard</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4 border-l border-slate-700 pl-6">
+                    <div class="text-right hidden sm:block">
+                        <p id="user-name-display" class="text-sm font-bold text-white leading-none">Usuário</p>
+                        <p id="user-role-display" class="text-[10px] text-blue-400 mt-1 font-extrabold uppercase">...</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-md border-2 border-slate-800 text-lg"><span id="avatar-initial">U</span></div>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition ml-2"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </div>
-            <button onclick="logout()" class="w-full py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition">
-                <i class="fas fa-sign-out-alt mr-1"></i> Sair
-            </button>
-        </div>
-    </aside>
+        </nav>
 
-    <main class="flex-1 flex flex-col h-screen overflow-hidden relative">
-        
-        <header class="h-16 bg-white border-b border-slate-200 flex justify-between items-center px-6 shrink-0">
-            <h1 class="font-extrabold text-slate-700 text-lg" id="titulo-pagina">Visão Geral</h1>
-            
-            <div class="hidden md:flex items-center bg-slate-100 rounded-lg px-3 py-1.5 w-64 border border-transparent focus-within:border-blue-300 focus-within:bg-white transition">
-                <i class="fas fa-search text-slate-400 text-xs"></i>
-                <input type="text" id="global-search" onkeyup="aplicarFiltrosGlobal()" placeholder="Buscar..." class="bg-transparent border-none outline-none text-xs font-bold text-slate-600 ml-2 w-full placeholder:font-normal">
+        <header class="bg-white border-b border-gray-200 py-4 z-40">
+            <div class="container mx-auto px-6 flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
+                <div class="relative flex-1 group">
+                    <input type="text" id="global-search" oninput="debounceBusca()" placeholder="🔎 Pesquisar..." 
+                        class="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-slate-700 font-semibold transition-all outline-none">
+                    <i class="fas fa-search absolute left-4 top-3.5 text-slate-400 text-lg group-focus-within:text-blue-500 transition-colors"></i>
+                </div>
+                <div class="flex gap-3 shrink-0">
+                    <div class="relative group w-40">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-purple-400"><i class="fas fa-calculator"></i></div>
+                        <input type="text" id="quick-idade" placeholder="Data (Idade)" maxlength="10" class="quick-input w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-purple-50/50 border-purple-100 focus:ring-purple-200 placeholder-purple-300" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularIdadeHeader()">
+                    </div>
+                    <div class="relative group w-32">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-blue-400"><i class="fas fa-map-marker-alt"></i></div>
+                        <input type="text" id="quick-cep" placeholder="CEP" maxlength="9" class="quick-input w-full pl-9 pr-2 py-3 rounded-xl text-sm font-bold text-gray-600 outline-none bg-blue-50/50 border-blue-100 focus:ring-blue-200 placeholder-blue-300" onkeyup="if(event.key === 'Enter') buscarCEPHeader()">
+                    </div>
+                </div>
             </div>
         </header>
 
-        <div class="flex-1 overflow-y-auto p-6 bg-slate-50/50" id="main-scroll">
-            
-            <div id="view-login" class="fixed inset-0 bg-slate-50 z-50 flex items-center justify-center p-4">
-                <div class="bg-white p-8 rounded-2xl shadow-xl w-full max-w-sm text-center border border-slate-100">
-                    <div class="mb-6 inline-block p-4 rounded-full bg-blue-50 text-blue-600 text-3xl">
-                        <i class="fas fa-lock"></i>
-                    </div>
-                    <h2 class="text-xl font-extrabold text-slate-800 mb-1">Acesso Restrito</h2>
-                    <p class="text-sm text-slate-400 mb-6">Entre com suas credenciais.</p>
-                    
-                    <form onsubmit="event.preventDefault(); fazerLogin();" class="space-y-4">
-                        <input type="text" id="login-user" placeholder="Usuário" class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition">
-                        <input type="password" id="login-pass" placeholder="Senha" class="w-full px-4 py-3 rounded-lg bg-slate-50 border border-slate-200 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition">
-                        <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3 rounded-lg hover:bg-blue-700 hover:shadow-lg hover:shadow-blue-500/30 transition transform active:scale-95">
-                            Entrar
-                        </button>
-                    </form>
-                </div>
-            </div>
-
-            <div id="view-dashboard" class="space-y-6 animate-fade-in hidden">
+        <div id="filter-bar" class="bg-slate-50 border-b border-slate-200 py-2.5 z-30 sticky top-0">
+            <div class="container mx-auto px-6 flex items-center gap-3 overflow-x-auto whitespace-nowrap pb-1 lg:pb-0 scrollbar-hide">
+                <span class="text-xs font-extrabold text-slate-400 uppercase tracking-widest mr-2 shrink-0"><i class="fas fa-filter mr-1"></i> Filtros:</span>
+                <select id="filtro-empresa" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">🏢 Empresas</option></select>
+                <select id="filtro-motivo" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">🎯 Motivos</option></select>
+                <select id="filtro-doc" onchange="aplicarFiltros('select')" class="header-select py-1.5 pl-3 pr-8 rounded-lg border border-slate-200 bg-white text-xs font-bold text-slate-600 focus:border-blue-500 outline-none cursor-pointer hover:bg-slate-50 transition"><option value="">📄 Docs</option></select>
+                <button onclick="limparFiltros()" class="text-xs font-bold text-red-400 hover:text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg transition"><i class="fas fa-times mr-1"></i> Limpar</button>
+                <div class="w-px h-6 bg-slate-200 mx-2 shrink-0"></div>
                 
-                <div id="painel-dashboard" class="space-y-6">
-                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Interações</p>
-                                    <p class="text-2xl font-black text-blue-600 mt-1" id="kpi-total-usos">0</p>
-                                </div>
-                                <div class="bg-blue-50 text-blue-500 p-2 rounded-lg text-lg"><i class="fas fa-chart-line"></i></div>
-                            </div>
-                        </div>
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Frases Ativas</p>
-                                    <p class="text-2xl font-black text-slate-700 mt-1" id="kpi-frases-ativas">0</p>
-                                </div>
-                                <div class="bg-slate-100 text-slate-500 p-2 rounded-lg text-lg"><i class="fas fa-database"></i></div>
-                            </div>
-                        </div>
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Inativas (90d)</p>
-                                    <div id="contador-sem-uso" class="text-2xl font-black text-green-500 mt-1">0</div>
-                                </div>
-                                <div class="bg-orange-50 text-orange-500 p-2 rounded-lg text-lg"><i class="fas fa-stopwatch"></i></div>
-                            </div>
-                        </div>
-                        <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
-                            <div class="flex justify-between items-start">
-                                <div>
-                                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Membros</p>
-                                    <p class="text-2xl font-black text-purple-600 mt-1" id="kpi-total-users">0</p>
-                                </div>
-                                <div class="bg-purple-50 text-purple-500 p-2 rounded-lg text-lg"><i class="fas fa-users"></i></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
-                                <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-trophy mr-2 text-yellow-500"></i>Top 5 Mais Ativos</h3>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left"><tbody id="lista-top-users"></tbody></table>
-                            </div>
-                        </div>
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
-                                <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-user-clock mr-2 text-slate-400"></i>Top 5 Menos Ativos</h3>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left"><tbody id="lista-bottom-users"></tbody></table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50">
-                                <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-fire mr-2 text-red-500"></i>Frases Mais Utilizadas</h3>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left"><tbody id="lista-top-frases"></tbody></table>
-                            </div>
-                        </div>
-                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                            <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50">
-                                <h3 class="font-bold text-slate-700 text-sm" title="Frases com pelo menos 10 usos"><i class="fas fa-battery-quarter mr-2 text-orange-400"></i>Frases Menos Usadas (+10 usos)</h3>
-                            </div>
-                            <div class="overflow-x-auto">
-                                <table class="w-full text-left"><tbody id="lista-low-frases"></tbody></table>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-                        <div class="px-6 py-4 border-b border-slate-50 bg-red-50/30 flex justify-between items-center">
-                            <h3 class="font-bold text-red-700 text-sm"><i class="fas fa-archive mr-2"></i>Zona de Esquecimento (Sem uso há 90+ dias)</h3>
-                        </div>
-                        <div class="overflow-x-auto max-h-96 custom-scrollbar">
-                            <table class="w-full text-left"><tbody id="lista-frases-sem-uso"></tbody></table>
-                        </div>
-                    </div>
-
-                </div>
+                <button id="btn-add-global" onclick="abrirModalFrase()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-plus"></i> Nova Frase</button>
+                <button id="btn-add-member" onclick="abrirModalUsuario()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-user-plus"></i> Novo Membro</button>
+                <button id="btn-refresh-logs" onclick="carregarLogs()" class="hidden bg-white border border-slate-200 text-slate-600 hover:text-blue-600 px-4 py-1.5 rounded-lg text-xs font-bold shadow-sm transition items-center gap-2"><i class="fas fa-sync-alt"></i> Atualizar</button>
             </div>
-            
-            <div id="view-frases" class="hidden animate-fade-in space-y-4">
-                <div class="flex flex-wrap justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100 gap-4">
-                    <div class="flex gap-2 w-full md:w-auto">
-                        <select id="filtro-empresa" onchange="aplicarFiltros('empresa')" class="text-xs border rounded px-2 py-1.5 bg-slate-50 outline-none focus:border-blue-500"><option value="">🏢 Empresas</option></select>
-                        <select id="filtro-motivo" onchange="aplicarFiltros('motivo')" class="text-xs border rounded px-2 py-1.5 bg-slate-50 outline-none focus:border-blue-500"><option value="">🎯 Motivos</option></select>
-                        <select id="filtro-doc" onchange="aplicarFiltros('doc')" class="text-xs border rounded px-2 py-1.5 bg-slate-50 outline-none focus:border-blue-500"><option value="">📄 Docs</option></select>
-                        <button onclick="limparFiltros()" class="text-slate-400 hover:text-slate-600 px-2" title="Limpar Filtros"><i class="fas fa-times"></i></button>
-                    </div>
-
-                    <div class="flex gap-2">
-                         <input type="file" id="input-import-sheet" class="hidden" accept=".xlsx, .xls" onchange="processarArquivoFrases(this)">
-                         <button onclick="importarPlanilhaFrases()" class="bg-green-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-green-700 transition shadow-sm"><i class="fas fa-file-excel mr-2"></i>Importar</button>
-                         <button onclick="abrirModalCriarFrase()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700 transition shadow-sm"><i class="fas fa-plus mr-2"></i>Nova</button>
-                    </div>
-                </div>
-                
-                <div id="grid-frases" class="grid grid-cols-1 gap-4">
-                    <p class="text-center text-slate-400 p-10">Carregando biblioteca...</p>
-                </div>
-            </div>
-
-            <div id="view-equipe" class="hidden animate-fade-in space-y-4">
-                 <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="font-bold text-slate-700">Gestão de Membros</h2>
-                        <button onclick="abrirModalUsuario()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-blue-700"><i class="fas fa-user-plus mr-2"></i>Novo Membro</button>
-                    </div>
-                    <div id="lista-equipe-container"></div>
-                </div>
-            </div>
-
-            <div id="view-logs" class="hidden animate-fade-in space-y-4">
-                </div>
-
         </div>
-    </main>
 
-    <div id="modal-usuario" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center backdrop-blur-sm">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 transform transition-all">
-            <h3 id="modal-user-title" class="text-lg font-bold text-slate-700 mb-4">Novo Membro</h3>
-            <input type="hidden" id="id-user-edit">
-            <div class="space-y-3">
-                <input id="nome-novo" type="text" placeholder="Nome Completo" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                <input id="user-novo" type="text" placeholder="Login (ID)" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                <input id="pass-novo" type="text" placeholder="Senha" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                <select id="perfil-novo" class="w-full px-4 py-2 rounded bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
-                    <option value="user">Colaborador</option>
-                    <option value="admin">Administrador</option>
-                </select>
-                <div class="flex items-center gap-2 mt-2">
-                    <input type="checkbox" id="ativo-novo" class="w-4 h-4 text-blue-600 rounded cursor-pointer">
-                    <label for="ativo-novo" class="text-sm text-slate-600 font-bold cursor-pointer">Usuário Ativo</label>
-                </div>
+        <main class="flex-1 overflow-y-auto bg-slate-100 p-6">
+            <div class="container mx-auto max-w-7xl h-full flex flex-col">
+                
+                <section id="view-biblioteca" class="view-section flex-grow">
+                    <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full pb-20"></div>
+                </section>
+
+                <section id="view-dashboard" class="view-section hidden flex-grow space-y-6">
+                    <div id="painel-dashboard" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Interações</p>
+                                        <p class="text-2xl font-black text-blue-600 mt-1" id="kpi-total-usos">0</p>
+                                    </div>
+                                    <div class="bg-blue-50 text-blue-500 p-2 rounded-lg text-lg"><i class="fas fa-chart-line"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Frases Ativas</p>
+                                        <p class="text-2xl font-black text-slate-700 mt-1" id="kpi-frases-ativas">0</p>
+                                    </div>
+                                    <div class="bg-slate-100 text-slate-500 p-2 rounded-lg text-lg"><i class="fas fa-database"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sem Uso (90d)</p>
+                                        <div id="contador-sem-uso" class="text-2xl font-black text-green-500 mt-1">0</div>
+                                    </div>
+                                    <div class="bg-orange-50 text-orange-500 p-2 rounded-lg text-lg"><i class="fas fa-stopwatch"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Membros</p>
+                                        <p class="text-2xl font-black text-purple-600 mt-1" id="kpi-total-users">0</p>
+                                    </div>
+                                    <div class="bg-purple-50 text-purple-500 p-2 rounded-lg text-lg"><i class="fas fa-users"></i></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
+                                    <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-trophy mr-2 text-yellow-500"></i>Top 5 Mais Ativos</h3>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left"><tbody id="lista-top-users"></tbody></table>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center">
+                                    <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-user-clock mr-2 text-slate-400"></i>Top 5 Menos Ativos</h3>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left"><tbody id="lista-bottom-users"></tbody></table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50">
+                                    <h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-fire mr-2 text-red-500"></i>Frases Mais Utilizadas</h3>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left"><tbody id="lista-top-frases"></tbody></table>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50">
+                                    <h3 class="font-bold text-slate-700 text-sm" title="Frases com pelo menos 10 usos"><i class="fas fa-battery-quarter mr-2 text-orange-400"></i>Frases Menos Usadas (+10 usos)</h3>
+                                </div>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left"><tbody id="lista-low-frases"></tbody></table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-10">
+                            <div class="px-6 py-4 border-b border-slate-50 bg-red-50/30 flex justify-between items-center">
+                                <h3 class="font-bold text-red-700 text-sm"><i class="fas fa-archive mr-2"></i>Zona de Esquecimento (Sem uso há 90+ dias)</h3>
+                            </div>
+                            <div class="overflow-x-auto max-h-96 custom-scrollbar">
+                                <table class="w-full text-left"><tbody id="lista-frases-sem-uso"></tbody></table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="view-logs" class="view-section hidden flex-grow space-y-6">
+                    <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
+                </section>
+
+                <section id="view-equipe" class="view-section hidden flex-grow">
+                    <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mb-8" id="lista-equipe-container"></div>
+                    <div class="bg-white rounded-2xl shadow-sm border border-red-100 p-6"><h4 class="text-sm font-extrabold text-slate-700 mb-4 flex items-center gap-2"><i class="fas fa-database text-red-400"></i> Dados</h4><div class="flex gap-4"><button onclick="baixarBackup()" class="flex-1 bg-slate-50 border border-slate-200 font-bold py-3 rounded-xl text-xs">Baixar Backup</button></div></div>
+                </section>
+                
+                <footer class="mt-auto pt-6 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-4">Desenvolvido por Pedro Gabriel</footer>
             </div>
-            <div class="mt-6 flex justify-end gap-2">
-                <button onclick="fecharModalUsuario()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded">Cancelar</button>
-                <button onclick="salvarUsuario()" id="btn-salvar-user" class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded hover:bg-blue-700 shadow-lg shadow-blue-500/30">Salvar</button>
+        </main>
+
+        <div id="chat-container" class="fixed bottom-6 right-6 z-50">
+            <button onclick="toggleChat()" id="chat-toggle-btn" class="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 relative">
+                <i class="fas fa-comments text-2xl"></i>
+                <span id="badge-online" class="absolute top-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full hidden"></span>
+                <span id="badge-unread" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-slate-900 hidden">0</span>
+            </button>
+            <div id="chat-window" class="absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col chat-widget chat-closed" style="height: 450px;">
+                <div class="bg-slate-900 text-white p-3 flex justify-between items-center shadow-md"><div><h4 class="font-bold text-sm">Chat da Equipe</h4><span id="online-count" class="text-[10px] text-slate-300">Offline</span></div><button onclick="toggleChat()"><i class="fas fa-times"></i></button></div>
+                <div id="online-users-list" class="bg-slate-50 border-b border-slate-200 px-4 py-1 text-[10px] text-slate-500 hidden"></div>
+                <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 text-xs"></div>
+                <div class="p-2 bg-white border-t border-slate-100 flex gap-2"><input type="text" id="chat-input" class="flex-1 bg-slate-100 border-0 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Mensagem..." onkeypress="if(event.key === 'Enter') enviarMensagem()"><button onclick="enviarMensagem()" class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center"><i class="fas fa-paper-plane text-xs"></i></button></div>
             </div>
         </div>
     </div>
 
-    <div id="modal-frase" class="fixed inset-0 bg-slate-900/50 z-50 hidden flex items-center justify-center backdrop-blur-sm">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6">
-            <h3 id="modal-title" class="text-lg font-bold text-slate-700 mb-4">Editar Frase</h3>
-            <input type="hidden" id="id-frase">
-            <div class="grid grid-cols-2 gap-3 mb-3">
-                <input id="inp-empresa" placeholder="Empresa" class="px-3 py-2 border rounded text-sm bg-slate-50 outline-none focus:border-blue-500">
-                <input id="inp-motivo" placeholder="Motivo" class="px-3 py-2 border rounded text-sm bg-slate-50 outline-none focus:border-blue-500">
-            </div>
-            <input id="inp-doc" placeholder="Documento" class="w-full px-3 py-2 border rounded text-sm bg-slate-50 mb-3 outline-none focus:border-blue-500">
-            <textarea id="inp-conteudo" rows="4" placeholder="Conteúdo da frase..." class="w-full px-3 py-2 border rounded text-sm bg-slate-50 mb-4 outline-none focus:border-blue-500"></textarea>
-            
-            <div class="flex justify-end gap-2">
-                <button onclick="document.getElementById('modal-frase').classList.add('hidden')" class="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded">Cancelar</button>
-                <button onclick="salvarFrase()" class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded hover:bg-blue-700 shadow-md">Salvar</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // --- CONFIGURAÇÃO SUPABASE ---
-        // IMPORTANTE: Insira suas credenciais reais aqui
-        const SUPABASE_URL = 'SUA_URL_SUPABASE_AQUI'; 
-        const SUPABASE_KEY = 'SUA_KEY_SUPABASE_AQUI';
-        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-        let usuarioLogado = null;
-
-        // Sistema de Navegação
-        function navegarPara(viewId) {
-            // Esconde todas as views
-            ['view-dashboard', 'view-frases', 'view-equipe', 'view-logs'].forEach(id => {
-                document.getElementById(id).classList.add('hidden');
-            });
-            // Mostra a desejada
-            document.getElementById('view-' + viewId).classList.remove('hidden');
-            
-            // Atualiza Título e Menu Ativo
-            const titulos = {
-                'dashboard': 'Dashboard Geral',
-                'frases': 'Gerenciador de Frases',
-                'equipe': 'Membros da Equipe',
-                'logs': 'Registro de Atividades'
-            };
-            document.getElementById('titulo-pagina').innerText = titulos[viewId] || 'Gupy Frases';
-
-            document.querySelectorAll('nav button').forEach(btn => btn.classList.remove('active-nav'));
-            const btnAtivo = document.getElementById('nav-' + viewId);
-            if(btnAtivo) btnAtivo.classList.add('active-nav');
-
-            // Dispara carregamentos
-            if(viewId === 'dashboard') carregarDashboard();
-            if(viewId === 'equipe') carregarEquipe();
-            if(viewId === 'logs') carregarLogs();
-            if(viewId === 'frases') carregarFrases();
-        }
-
-        // Login
-        async function fazerLogin() {
-            const user = document.getElementById('login-user').value;
-            const pass = document.getElementById('login-pass').value;
-
-            try {
-                const { data, error } = await _supabase
-                    .from('usuarios')
-                    .select('*')
-                    .eq('username', user)
-                    .eq('senha', pass)
-                    .single();
-
-                if (error || !data) throw new Error();
-                if (!data.ativo) return Swal.fire('Acesso Negado', 'Usuário inativo.', 'error');
-
-                usuarioLogado = data;
-                document.getElementById('nome-usuario-logado').innerText = data.nome || data.username;
-                document.getElementById('avatar-user').innerText = (data.nome || data.username).charAt(0).toUpperCase();
-                
-                document.getElementById('view-login').classList.add('hidden');
-                
-                // Redireciona
-                if(data.perfil === 'admin') navegarPara('dashboard');
-                else {
-                    document.getElementById('nav-dashboard').classList.add('hidden');
-                    navegarPara('frases');
-                }
-                
-                // Grava log
-                registrarLog('LOGIN', 'Acesso realizado');
-
-            } catch (e) {
-                Swal.fire('Erro', 'Credenciais inválidas', 'error');
-            }
-        }
-
-        function logout() {
-            usuarioLogado = null;
-            document.getElementById('view-login').classList.remove('hidden');
-        }
-
-        // Função auxiliar para logs
-        async function registrarLog(acao, detalhe) {
-            if(!usuarioLogado) return;
-            await _supabase.from('logs').insert([{
-                usuario: usuarioLogado.username,
-                acao: acao,
-                detalhe: detalhe,
-                data_hora: new Date().toISOString()
-            }]);
-        }
-        
-        // Filtro Global na barra superior (conecta com a função de filtro da biblioteca)
-        function aplicarFiltrosGlobal() {
-            // Se estiver na view de frases, usa o filtro da biblioteca
-            if(!document.getElementById('view-frases').classList.contains('hidden') && typeof aplicarFiltros === 'function') {
-                aplicarFiltros('global');
-            }
-            // (Opcional) Poderia filtrar logs ou equipe aqui também se desejado
-        }
-    </script>
-
-    <script src="js/biblioteca.js"></script>
+    <script src="js/app.js"></script> <script src="js/biblioteca.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/logs.js"></script>
     <script src="js/equipe.js"></script>
-
 </body>
 </html>
