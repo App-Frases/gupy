@@ -5,7 +5,7 @@ let cacheFrases = [];
 async function carregarFrases() {
     try {
         const container = document.getElementById('grid-frases');
-        if(container) container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando sua biblioteca personalizada...</div>';
+        if(container) container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando biblioteca personalizada...</div>';
 
         // 1. Busca TODAS as frases (Dados Globais)
         const { data: frasesGlobais, error: erroFrases } = await _supabase
@@ -14,37 +14,32 @@ async function carregarFrases() {
         
         if (erroFrases) throw erroFrases;
 
-        // 2. Busca MEUS USOS pessoais (Dados Pessoais)
+        // 2. Busca MEUS USOS via LOGS (Usando a View que criamos)
         let meusUsosMap = {};
         if (usuarioLogado) {
             const { data: meusStats, error: erroStats } = await _supabase
-                .from('user_frase_stats')
+                .from('view_usos_pessoais') // <--- Lê direto da View baseada em Logs
                 .select('frase_id, qtd_uso')
-                .eq('username', usuarioLogado.username);
+                .eq('usuario', usuarioLogado.username);
             
             if (!erroStats && meusStats) {
-                // Cria um mapa rápido: { ID_FRASE: QTD_USO }
                 meusStats.forEach(stat => {
                     meusUsosMap[stat.frase_id] = stat.qtd_uso;
                 });
             }
         }
 
-        // 3. Mescla e Ordena (A Mágica acontece aqui)
+        // 3. Mescla e Ordena
         cacheFrases = (frasesGlobais || []).map(f => ({
             ...f,
-            meus_usos: meusUsosMap[f.id] || 0, // Se não tiver uso pessoal, é 0
+            meus_usos: meusUsosMap[f.id] || 0, // Se não tiver log, é 0
             _busca: normalizar(f.conteudo + f.empresa + f.motivo + f.documento)
         }));
 
-        // ORDENAÇÃO INTELIGENTE:
-        // 1º: O que EU mais uso.
-        // 2º: O que a EMPRESA mais usa (Desempate).
+        // ORDENAÇÃO INTELIGENTE (Prioriza uso pessoal)
         cacheFrases.sort((a, b) => {
-            if (b.meus_usos !== a.meus_usos) {
-                return b.meus_usos - a.meus_usos; // Prioridade pessoal
-            }
-            return (b.usos || 0) - (a.usos || 0); // Critério global
+            if (b.meus_usos !== a.meus_usos) return b.meus_usos - a.meus_usos;
+            return (b.usos || 0) - (a.usos || 0);
         });
         
         aplicarFiltros('inicio');
@@ -62,47 +57,20 @@ async function copiarTexto(id) {
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
-        // Log de Segurança
-        registrarLog('COPIAR', String(id)); 
+        // 1. O LOG É O SEGREDO: Ao registrar o log, a View 'view_usos_pessoais' atualiza sozinha!
+        await registrarLog('COPIAR', String(id)); 
 
-        // ATUALIZAÇÃO DUPLA (Global + Pessoal)
-        
-        // 1. Atualiza Global (Para o Dashboard do Admin)
+        // 2. Atualiza Global (apenas para manter o dashboard admin rápido)
         const novoUsoGlobal = (f.usos || 0) + 1;
         const agora = new Date().toISOString();
-        // Dispara e esquece (não espera await para ser rápido na UI)
         _supabase.from('frases').update({ usos: novoUsoGlobal, ultimo_uso: agora }).eq('id', id).then();
 
-        // 2. Atualiza Pessoal (Tabela Nova)
-        // Precisamos verificar se já existe registro ou criar um novo
-        const { data: statsExistente } = await _supabase
-            .from('user_frase_stats')
-            .select('*')
-            .eq('username', usuarioLogado.username)
-            .eq('frase_id', id)
-            .single();
-
-        let novoUsoPessoal = 1;
-
-        if (statsExistente) {
-            novoUsoPessoal = statsExistente.qtd_uso + 1;
-            await _supabase
-                .from('user_frase_stats')
-                .update({ qtd_uso: novoUsoPessoal, ultimo_uso: agora })
-                .eq('id', statsExistente.id);
-        } else {
-            await _supabase
-                .from('user_frase_stats')
-                .insert([{ username: usuarioLogado.username, frase_id: id, qtd_uso: 1 }]);
-        }
-        
-        // Atualiza Cache Local e UI imediatamente
-        f.usos = novoUsoGlobal;     // Mantemos o global no objeto
-        f.meus_usos = novoUsoPessoal; // Atualizamos o pessoal
+        // 3. Atualiza Visualmente (Sem recarregar tudo)
+        f.usos = novoUsoGlobal;
+        f.meus_usos = (f.meus_usos || 0) + 1; // Incrementa localmente para feedback instantâneo
 
         const elContador = document.querySelector(`#card-frase-${id} .contador-usos`);
-        // Mostra visualmente o contador pessoal para o usuário sentir a personalização
-        if(elContador) elContador.innerHTML = `<i class="fas fa-user-check mr-1"></i>${novoUsoPessoal} vezes usado por mim`;
+        if(elContador) elContador.innerHTML = `<i class="fas fa-user-check mr-1 text-blue-500"></i>${f.meus_usos} vezes usado por mim`;
     }); 
 }
 
@@ -122,6 +90,7 @@ function aplicarFiltros(origem) {
 
     if (termo) base = base.filter(f => f._busca.includes(termo));
 
+    // Lógica para filtrar opções dos selects dinamicamente
     const optsEmpresa = base.filter(f => (valMotivo ? f.motivo === valMotivo : true) && (valDoc ? f.documento === valDoc : true));
     const optsMotivo = base.filter(f => (valEmpresa ? f.empresa === valEmpresa : true) && (valDoc ? f.documento === valDoc : true));
     const optsDoc = base.filter(f => (valEmpresa ? f.empresa === valEmpresa : true) && (valMotivo ? f.motivo === valMotivo : true));
@@ -136,13 +105,8 @@ function aplicarFiltros(origem) {
         (valDoc ? f.documento === valDoc : true)
     );
     
-    let listaFinal;
-
-    if (!temFiltro) {
-        listaFinal = filtrados.slice(0, 4); // Top 4 Personalizados
-    } else {
-        listaFinal = filtrados;
-    }
+    // Se não tiver filtro, mostra Top 4 (baseado na ordenação pessoal carregada no início)
+    const listaFinal = !temFiltro ? filtrados.slice(0, 4) : filtrados;
 
     renderizarBiblioteca(listaFinal, !temFiltro); 
 }
@@ -165,8 +129,7 @@ function renderizarBiblioteca(lista, isTop4) {
         const idSafe = f.id;
         const objSafe = JSON.stringify(f).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         
-        // Lógica visual do contador:
-        // Se eu já usei, mostra "X usos meus". Se nunca usei, mostra "X usos globais" (para incentivo)
+        // VISUALIZAÇÃO HÍBRIDA DO CONTADOR
         let textoContador;
         let iconeContador;
         if (f.meus_usos > 0) {
@@ -189,7 +152,6 @@ function renderizarBiblioteca(lista, isTop4) {
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
                     <button onclick="copiarTexto(${idSafe})" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5" title="Copiar"><i class="far fa-copy"></i> Copiar</button>
-                    
                     <button onclick='editarFrase(${objSafe})' class="bg-white border border-yellow-200 text-yellow-600 hover:bg-yellow-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Editar"><i class="fas fa-pen"></i></button>
                     <button onclick="deletarFraseBiblioteca(${idSafe})" class="bg-white border border-red-200 text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Excluir"><i class="fas fa-trash-alt"></i></button>
                 </div>
@@ -206,31 +168,7 @@ function renderizarBiblioteca(lista, isTop4) {
     grid.innerHTML = cards;
 }
 
-function limparFiltros() { 
-    const search = document.getElementById('global-search');
-    if(search) search.value = ''; 
-    document.querySelectorAll('select').forEach(s=>s.value=''); 
-    aplicarFiltros('inicio'); 
-}
-
-// --- UTIL: PADRONIZAÇÃO DE TEXTO ---
-function padronizarFraseInteligente(texto) {
-    if (!texto) return "";
-    let t = texto.replace(/\s+/g, ' ').trim();
-    t = t.replace(/^"+|"+$/g, ''); 
-    t = t.trim();
-    t = t.replace(/\s+([.,!?;:])/g, '$1'); 
-    t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 '); 
-    const letras = t.replace(/[^a-zA-Z]/g, '');
-    if (letras.length > 4 && letras === letras.toUpperCase()) {
-        t = t.toLowerCase();
-    }
-    t = t.charAt(0).toUpperCase() + t.slice(1);
-    return t;
-}
-
-// --- CRUD ---
-
+// --- UTIL: SUGESTÕES DE AUTOCOMPLETAR ---
 function atualizarSugestoesModal() {
     const preencher = (idLista, chave) => {
         const lista = document.getElementById(idLista);
@@ -243,6 +181,7 @@ function atualizarSugestoesModal() {
     preencher('list-docs', 'documento');
 }
 
+// --- CRUD PADRÃO ---
 function abrirModalFrase() { 
     document.getElementById('id-frase').value=''; 
     document.getElementById('inp-conteudo').value=''; 
@@ -274,7 +213,7 @@ async function salvarFrase() {
     const rawConteudo = document.getElementById('inp-conteudo').value;
 
     if (!rawEmpresa || !rawMotivo || !rawDoc || !rawConteudo.trim()) {
-        return Swal.fire({title: 'Campos Obrigatórios', text: 'Por favor, preencha todos os campos.', icon: 'warning', confirmButtonColor: '#3b82f6'});
+        return Swal.fire({title: 'Atenção', text: 'Preencha todos os campos.', icon: 'warning'});
     }
     
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
@@ -285,9 +224,7 @@ async function salvarFrase() {
         return inputPuro === bancoPuro;
     });
 
-    if (duplicada) {
-        return Swal.fire({title: 'Frase Duplicada', text: 'Esta frase já existe na biblioteca.', icon: 'warning'});
-    }
+    if (duplicada) return Swal.fire({title: 'Duplicada', text: 'Frase já existe.', icon: 'warning'});
 
     const dados = { 
         empresa: formatarTextoBonito(rawEmpresa, 'titulo'), 
@@ -304,16 +241,15 @@ async function salvarFrase() {
         } else { 
             const { data } = await _supabase.from('frases').insert([dados]).select(); 
             if(data && data[0]) registrarLog('CRIAR', data[0].id);
-            else registrarLog('CRIAR', 'Nova frase');
         } 
         document.getElementById('modal-frase').classList.add('hidden'); 
         carregarFrases(); 
-        Swal.fire('Salvo!', 'Frase salva com sucesso.', 'success'); 
+        Swal.fire('Salvo!', '', 'success'); 
     } catch(e) { Swal.fire('Erro', 'Falha ao salvar', 'error'); } 
 }
 
 async function deletarFraseBiblioteca(id) {
-    if((await Swal.fire({title:'Excluir?', text: "Esta ação não pode ser desfeita.", icon: 'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Sim, excluir'})).isConfirmed) {
+    if((await Swal.fire({title:'Excluir?', text: "Sem volta.", icon: 'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Sim'})).isConfirmed) {
         await _supabase.from('frases').delete().eq('id', id);
         registrarLog('EXCLUIR', id);
         carregarFrases();
