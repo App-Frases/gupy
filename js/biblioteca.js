@@ -2,21 +2,17 @@
 
 let cacheFrases = [];
 
-// --- CARREGAMENTO OTIMIZADO ---
 async function carregarFrases() {
     try {
-        // Agora buscamos ordenado por 'usos' direto do banco!
-        // Não precisamos mais baixar logs para contar aqui.
         const { data, error } = await _supabase
             .from('frases')
             .select('*')
-            .order('usos', {ascending: false}); // As mais usadas aparecem primeiro
+            .order('usos', {ascending: false}); 
         
         if (error) throw error;
 
         cacheFrases = (data || []).map(f => ({
             ...f, 
-            // Cria campo de busca otimizado
             _busca: normalizar(f.conteudo + f.empresa + f.motivo + f.documento)
         }));
         
@@ -27,49 +23,41 @@ async function carregarFrases() {
     }
 }
 
-// --- AÇÃO DE COPIAR (ATUALIZADA PARA O NOVO BANCO) ---
 async function copiarTexto(id) { 
     const f = cacheFrases.find(i => i.id == id); 
     if(!f) return;
 
     navigator.clipboard.writeText(f.conteudo).then(async () => { 
-        // 1. Feedback Visual Rápido
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
-        // 2. REGISTRA LOG (Para auditoria e Ranking de Usuários)
-        // Continuamos registrando quem copiou para saber quem trabalha mais
         _supabase.from('logs').insert([{
             usuario: usuarioLogado.username, 
-            acao: 'COPIAR_RANK', // Ação específica para contagem
+            acao: 'COPIAR_RANK', 
             detalhe: String(id), 
             data_hora: new Date().toISOString()
-        }]).then(() => {}); // Executa em background (não trava a tela)
+        }]).then(() => {}); 
 
-        // 3. ATUALIZA A FRASE NO BANCO (A Mágica Nova)
-        // Incrementa uso e atualiza data sem precisar de cálculos complexos depois
         const novoUso = (f.usos || 0) + 1;
         const agora = new Date().toISOString();
 
-        // Atualiza no Banco
         await _supabase
             .from('frases')
             .update({ usos: novoUso, ultimo_uso: agora })
             .eq('id', id);
         
-        // Atualiza na Tela (Memória) para feedback instantâneo
         f.usos = novoUso;
-        f.qtd_usos = novoUso; // Mantendo compatibilidade visual se houver
         
-        // Atualiza apenas o contador visual deste card específico se possível, ou re-renderiza
+        // Atualiza contador visual
         const elContador = document.querySelector(`#card-frase-${id} .contador-usos`);
         if(elContador) elContador.innerHTML = `<i class="fas fa-history mr-1"></i>${novoUso} usos`;
     }); 
 }
 
-// --- FILTROS E RENDERIZAÇÃO (Mantidos, apenas ajuste no HTML do card) ---
 function aplicarFiltros(origem) {
-    const termo = normalizar(document.getElementById('global-search').value);
+    const elSearch = document.getElementById('global-search');
+    const termo = elSearch ? normalizar(elSearch.value) : '';
+    
     const elEmpresa = document.getElementById('filtro-empresa');
     const elMotivo = document.getElementById('filtro-motivo');
     const elDoc = document.getElementById('filtro-doc');
@@ -77,7 +65,6 @@ function aplicarFiltros(origem) {
     let base = cacheFrases;
     if (termo) base = base.filter(f => f._busca.includes(termo));
 
-    // Lógica de Selects Dinâmicos
     const valEmpresa = elEmpresa.value;
     const valMotivo = elMotivo.value;
     const valDoc = elDoc.value;
@@ -96,14 +83,12 @@ function aplicarFiltros(origem) {
         (elDoc.value ? f.documento === elDoc.value : true)
     );
     
-    // Paginação simples (mostra 10 ou todos se tiver filtro)
     const exibir = (termo || elEmpresa.value || elMotivo.value || elDoc.value) ? filtrados : filtrados.slice(0, 10);
     renderizarBiblioteca(exibir); 
 }
 
 function updateSelect(id, list, key, label, currentValue) { 
     const sel = document.getElementById(id); 
-    // Evita loop infinito de atualização se for o próprio select que disparou
     if(document.activeElement === sel) return; 
     
     const uniq = [...new Set(list.map(i=>i[key]).filter(Boolean))].sort(); 
@@ -119,7 +104,6 @@ function renderizarBiblioteca(lista) {
     
     grid.innerHTML = lista.map(f => {
         const idSafe = f.id;
-        // Escapa aspas para não quebrar o JSON no onclick
         const objSafe = JSON.stringify(f).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
         
         return `
@@ -150,10 +134,16 @@ function renderizarBiblioteca(lista) {
     }).join('');
 }
 
-function limparFiltros() { document.getElementById('global-search').value = ''; document.querySelectorAll('select').forEach(s=>s.value=''); aplicarFiltros('inicio'); }
+function limparFiltros() { 
+    const search = document.getElementById('global-search');
+    if(search) search.value = ''; 
+    document.querySelectorAll('select').forEach(s=>s.value=''); 
+    aplicarFiltros('inicio'); 
+}
 
 // --- CRUD ---
-function abrirModalCriarFrase() { 
+// Renomeado para coincidir com o onclick no HTML
+function abrirModalFrase() { 
     document.getElementById('id-frase').value=''; 
     document.getElementById('inp-conteudo').value=''; 
     document.getElementById('inp-empresa').value=''; 
@@ -164,7 +154,6 @@ function abrirModalCriarFrase() {
 }
 
 function editarFrase(f) { 
-    // Se o objeto vier como string (alguns browsers antigos), parseia
     if(typeof f === 'string') f = JSON.parse(f);
     
     document.getElementById('id-frase').value = f.id; 
