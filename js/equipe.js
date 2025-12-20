@@ -121,7 +121,9 @@ function filtrarEquipe(termo) {
     });
 }
 
-// --- IMPORTAÇÃO E BACKUP ---
+// =========================================================================
+// GESTÃO DE DADOS (Backup, Restore, Limpeza)
+// =========================================================================
 
 function baixarBackup() {
     _supabase.from('frases').select('*').then(({data}) => {
@@ -133,6 +135,14 @@ function baixarBackup() {
     });
 }
 
+// Função para buscar TODAS as frases existentes e gerar um SET de verificação
+async function getFrasesExistentesSet() {
+    const { data } = await _supabase.from('frases').select('conteudo');
+    if(!data) return new Set();
+    // Cria um conjunto de frases normalizadas (sem pontuação/espaços) para comparação rápida
+    return new Set(data.map(f => normalizar(f.conteudo).replace(/[^\w]/g, '')));
+}
+
 async function restaurarBackup(input) {
     const file = input.files[0];
     if(!file) return;
@@ -140,47 +150,125 @@ async function restaurarBackup(input) {
     const reader = new FileReader();
     reader.onload = async (e) => {
         try {
-            const dados = JSON.parse(e.target.result);
-            if(!Array.isArray(dados)) throw new Error("Formato inválido");
-            
-            // Pergunta de confirmação
+            const dadosBackup = JSON.parse(e.target.result);
+            if(!Array.isArray(dadosBackup)) throw new Error("Formato inválido");
+
+            // 1. Busca o que já existe no banco
+            Swal.fire({title: 'Verificando...', text: 'Comparando com o banco de dados...', didOpen: () => Swal.showLoading()});
+            const existentesSet = await getFrasesExistentesSet();
+
+            // 2. Filtra apenas as NOVAS (que não estão no Set)
+            const novosRegistros = dadosBackup.filter(item => {
+                const chave = normalizar(item.conteudo).replace(/[^\w]/g, '');
+                if (existentesSet.has(chave)) return false; // Já existe
+                
+                existentesSet.add(chave); // Adiciona ao set para evitar duplicatas no próprio backup
+                return true;
+            });
+
+            // 3. Limpa IDs para gerar novos
+            const dadosLimpos = novosRegistros.map(({id, ...rest}) => rest);
+
+            if(dadosLimpos.length === 0) {
+                input.value = '';
+                return Swal.fire('Tudo atualizado', 'Todas as frases do backup já existem no sistema.', 'info');
+            }
+
+            // 4. Pergunta
             const conf = await Swal.fire({
                 title: 'Restaurar Backup?',
-                text: `Isso adicionará ${dados.length} frases ao sistema. Duplicatas exatas serão ignoradas.`,
+                html: `O backup tem <b>${dadosBackup.length}</b> frases.<br>O sistema identificou <b>${dadosLimpos.length}</b> frases novas.<br>As duplicadas serão ignoradas.`,
                 icon: 'question',
                 showCancelButton: true,
-                confirmButtonText: 'Sim, restaurar'
+                confirmButtonText: `Importar ${dadosLimpos.length} frases`
             });
 
             if(conf.isConfirmed) {
-                // Limpa IDs para criar novos registros ou faz upsert se preferir. 
-                // Aqui vamos fazer insert ignorando o ID para evitar conflitos, ou upsert se ID existir.
-                // Simples: Insert limpo (remove ID para gerar novos)
-                const dadosLimpos = dados.map(({id, ...rest}) => rest);
-                
-                // Envia em lotes de 50 para não travar
+                // Envia em lotes
                 let total = 0;
                 const batchSize = 50;
+                
+                Swal.fire({title: 'Importando...', didOpen: () => Swal.showLoading()});
+
                 for (let i = 0; i < dadosLimpos.length; i += batchSize) {
                     await _supabase.from('frases').insert(dadosLimpos.slice(i, i + batchSize));
                     total += dadosLimpos.slice(i, i + batchSize).length;
                 }
                 
-                Swal.fire('Sucesso!', `${total} frases restauradas.`, 'success');
-                registrarLog('LIMPEZA', `Restaurou backup (${total} itens)`);
+                Swal.fire('Sucesso!', `${total} novas frases restauradas.`, 'success');
+                registrarLog('LIMPEZA', `Restaurou backup (${total} novos itens)`);
             }
         } catch(err) {
-            Swal.fire('Erro', 'Arquivo de backup inválido ou corrompido.', 'error');
+            Swal.fire('Erro', 'Arquivo inválido.', 'error');
         }
-        input.value = ''; // Reseta input
+        input.value = ''; 
     };
     reader.readAsText(file);
 }
 
-// --- IMPORTAÇÃO EXCEL (MASSIVA) ---
+// --- REMOVER DUPLICADAS EM MASSA (SOLUÇÃO DO PROBLEMA ATUAL) ---
+async function removerDuplicadasEmMassa() {
+    const confirm = await Swal.fire({
+        title: 'Limpar Duplicadas?',
+        text: "Isso vai verificar todas as frases. Se houver frases iguais, manterá a mais antiga e apagará as cópias. Esta ação não pode ser desfeita.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#d33',
+        confirmButtonText: 'Sim, limpar tudo'
+    });
+
+    if (!confirm.isConfirmed) return;
+
+    Swal.fire({
+        title: 'Analisando...',
+        html: 'Buscando frases duplicadas no banco...',
+        allowOutsideClick: false,
+        didOpen: () => Swal.showLoading()
+    });
+
+    // 1. Baixa TODAS as frases (ID, Conteudo, Data de Criação/ID)
+    // Ordenamos por ID ascendente (os menores IDs são os mais antigos/originais)
+    const { data: todasFrases, error } = await _supabase.from('frases').select('id, conteudo').order('id', {ascending: true});
+    
+    if (error) return Swal.fire('Erro', 'Falha ao buscar frases.', 'error');
+
+    const vistos = new Set();
+    const idsParaExcluir = [];
+
+    // 2. Identifica duplicatas
+    todasFrases.forEach(f => {
+        // Normaliza para pegar duplicatas mesmo com pontuação diferente
+        const chave = normalizar(f.conteudo).replace(/[^\w]/g, '');
+        
+        if (vistos.has(chave)) {
+            // Se já vimos essa chave, esta é uma duplicata (e como está ordenado por ID, é mais recente)
+            idsParaExcluir.push(f.id);
+        } else {
+            // Primeira vez que vemos, marcamos como "original"
+            vistos.add(chave);
+        }
+    });
+
+    if (idsParaExcluir.length === 0) {
+        return Swal.fire('Limpo', 'Não foram encontradas frases duplicadas.', 'success');
+    }
+
+    // 3. Apaga em lotes
+    Swal.update({ html: `Encontradas <b>${idsParaExcluir.length}</b> cópias. Excluindo...` });
+
+    const batchSize = 100;
+    for (let i = 0; i < idsParaExcluir.length; i += batchSize) {
+        const batch = idsParaExcluir.slice(i, i + batchSize);
+        await _supabase.from('frases').delete().in('id', batch);
+    }
+
+    registrarLog('LIMPEZA', `Removeu ${idsParaExcluir.length} frases duplicadas`);
+    Swal.fire('Sucesso!', `${idsParaExcluir.length} frases duplicadas foram removidas.`, 'success');
+}
+
+// --- IMPORTAÇÃO EXCEL ---
 
 function baixarModeloExcel() {
-    // Cria uma planilha modelo na memória e baixa
     const ws = XLSX.utils.json_to_sheet([
         { "empresa": "Exemplo LTDA", "motivo": "Agradecimento", "documento": "Email", "conteudo": "Olá, agradecemos o seu contato..." },
         { "empresa": "Teste SA", "motivo": "Cobrança", "documento": "WhatsApp", "conteudo": "Prezado, consta em aberto..." }
@@ -204,70 +292,84 @@ async function processarUploadExcel(input) {
 
             if(jsonData.length === 0) return Swal.fire('Vazio', 'A planilha está vazia.', 'warning');
 
-            // Validação básica das colunas
+            // Validação de colunas
             const exemplo = jsonData[0];
             if(!exemplo.conteudo && !exemplo.Conteudo && !exemplo.CONTEUDO) {
-                return Swal.fire('Formato Inválido', 'A planilha precisa ter uma coluna chamada "conteudo". Baixe o modelo.', 'error');
+                return Swal.fire('Formato Inválido', 'Coluna "conteudo" obrigatória.', 'error');
             }
 
-            const preview = jsonData.length;
+            Swal.fire({title: 'Verificando...', text: 'Comparando duplicatas...', didOpen: () => Swal.showLoading()});
+            
+            // Busca existentes para filtrar
+            const existentesSet = await getFrasesExistentesSet();
+
+            // Prepara e Filtra
+            const frasesParaInserir = [];
+            let ignoradas = 0;
+
+            jsonData.forEach(row => {
+                const getVal = (key) => row[key] || row[key.toUpperCase()] || row[key.charAt(0).toUpperCase() + key.slice(1)] || '';
+                const conteudoRaw = getVal('conteudo');
+                
+                if(conteudoRaw) {
+                    const conteudoLimpo = padronizarFraseInteligente(conteudoRaw);
+                    const chave = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
+
+                    if (!existentesSet.has(chave)) {
+                        existentesSet.add(chave); // Evita duplicar dentro da própria planilha
+                        frasesParaInserir.push({
+                            empresa: formatarTextoBonito(getVal('empresa'), 'titulo') || 'Geral',
+                            motivo: formatarTextoBonito(getVal('motivo'), 'titulo') || 'Geral',
+                            documento: formatarTextoBonito(getVal('documento'), 'titulo') || 'Geral',
+                            conteudo: conteudoLimpo,
+                            revisado_por: usuarioLogado.username,
+                            usos: 0
+                        });
+                    } else {
+                        ignoradas++;
+                    }
+                }
+            });
+
+            if(frasesParaInserir.length === 0) {
+                return Swal.fire('Info', `Todas as ${jsonData.length} frases da planilha já existem no sistema.`, 'info');
+            }
+
             const confirm = await Swal.fire({
                 title: 'Importar Frases?',
-                text: `Encontradas ${preview} frases. Deseja importar?`,
+                html: `Novas frases: <b>${frasesParaInserir.length}</b><br>Duplicadas ignoradas: <b>${ignoradas}</b>`,
                 icon: 'info',
                 showCancelButton: true,
                 confirmButtonText: 'Sim, importar'
             });
 
             if(confirm.isConfirmed) {
-                // Prepara dados (Padroniza chaves para minúsculo)
-                const frasesParaInserir = jsonData.map(row => {
-                    // Busca flexível de colunas (case insensitive)
-                    const getVal = (key) => row[key] || row[key.toUpperCase()] || row[key.charAt(0).toUpperCase() + key.slice(1)] || '';
-                    
-                    return {
-                        empresa: formatarTextoBonito(getVal('empresa'), 'titulo') || 'Geral',
-                        motivo: formatarTextoBonito(getVal('motivo'), 'titulo') || 'Geral',
-                        documento: formatarTextoBonito(getVal('documento'), 'titulo') || 'Geral',
-                        conteudo: padronizarFraseInteligente(getVal('conteudo')), // Usa a nossa função inteligente de limpeza
-                        revisado_por: usuarioLogado.username,
-                        usos: 0
-                    };
-                }).filter(f => f.conteudo.length > 0); // Remove linhas vazias
-
-                // Envio em Lotes (Batch) para não estourar limite do Supabase Free
                 const batchSize = 50;
                 let inseridos = 0;
                 
-                // Barra de progresso visual (SweetAlert)
                 Swal.fire({
                     title: 'Importando...',
-                    html: 'Processando <b>0</b> de ' + frasesParaInserir.length,
+                    html: 'Enviando dados...',
                     allowOutsideClick: false,
                     didOpen: () => { Swal.showLoading(); }
                 });
 
                 for (let i = 0; i < frasesParaInserir.length; i += batchSize) {
                     const lote = frasesParaInserir.slice(i, i + batchSize);
-                    const { error } = await _supabase.from('frases').insert(lote);
-                    
-                    if(error) {
-                        console.error(error); // Continua tentando os próximos lotes mesmo se um falhar
-                    } else {
-                        inseridos += lote.length;
-                        Swal.update({ html: `Processando <b>${inseridos}</b> de ${frasesParaInserir.length}` });
-                    }
+                    await _supabase.from('frases').insert(lote);
+                    inseridos += lote.length;
+                    Swal.update({ html: `Processando <b>${inseridos}</b> de ${frasesParaInserir.length}` });
                 }
 
-                registrarLog('CRIAR', `Importação em massa: ${inseridos} frases`);
-                Swal.fire('Concluído!', `${inseridos} frases importadas com sucesso.`, 'success');
+                registrarLog('CRIAR', `Importação Excel: ${inseridos} frases`);
+                Swal.fire('Concluído!', `${inseridos} frases importadas.`, 'success');
             }
 
         } catch(err) {
             console.error(err);
-            Swal.fire('Erro', 'Falha ao processar arquivo Excel.', 'error');
+            Swal.fire('Erro', 'Falha ao processar arquivo.', 'error');
         }
-        input.value = ''; // Reseta input
+        input.value = '';
     };
     reader.readAsArrayBuffer(file);
 }
