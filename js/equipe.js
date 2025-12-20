@@ -1,368 +1,119 @@
-let cacheEquipe = [];
-let exibindoTodos = false; 
+// Local: js/equipe.js
 
-// --- BUSCA ESPECÍFICA ---
-function filtrarEquipe(termo) {
-    if (termo) {
-        const t = termo.toLowerCase();
-        const filtrados = cacheEquipe.filter(u => 
-            u.username.toLowerCase().includes(t) ||
-            (u.nome && u.nome.toLowerCase().includes(t)) ||
-            (u.ativo ? 'ativo' : 'inativo').includes(t) ||
-            (u.perfil === 'admin' ? 'administrador' : 'colaborador').includes(t)
-        );
-        atualizarContador(true, filtrados.length);
-        renderizarListaEquipe(filtrados, false); 
-        return;
-    }
-
-    if (exibindoTodos) {
-        atualizarContador(false, cacheEquipe.length, true);
-        renderizarListaEquipe(cacheEquipe, false); 
-    } else {
-        atualizarContador(false, 5, false);
-        const precisaBotao = cacheEquipe.length > 5;
-        renderizarListaEquipe(cacheEquipe.slice(0, 5), precisaBotao);
-    }
-}
-
-// ATUALIZA O BADGE NA BARRA DE FILTROS (Novo Local)
-function atualizarContador(isSearch, count, isFullList) {
-    const badge = document.getElementById('contador-equipe');
-    if(badge) {
-        badge.classList.remove('hidden'); // Garante que aparece
-        if(isSearch) {
-            badge.innerText = count + " RESULTADOS";
-            badge.className = "ml-2 text-xs font-extrabold text-white bg-green-500 px-3 py-1 rounded-full shadow-sm border border-green-600 align-middle";
-        } else if (isFullList) {
-            badge.innerText = "TODOS";
-            badge.className = "ml-2 text-xs font-extrabold text-purple-500 bg-purple-50 px-3 py-1 rounded-full shadow-sm border border-purple-100 align-middle";
-        } else {
-            badge.innerText = "ÚLTIMOS 5";
-            badge.className = "ml-2 text-xs font-extrabold text-blue-500 bg-blue-50 px-3 py-1 rounded-full shadow-sm border border-blue-100 align-middle";
-        }
-    }
-}
-
-function alternarVisualizacao() {
-    exibindoTodos = !exibindoTodos; 
-    filtrarEquipe(''); 
-}
-
-// --- CARREGAR ---
 async function carregarEquipe() {
-    const { data, error } = await _supabase
-        .from('usuarios')
-        .select('*')
-        .order('created_at', { ascending: false }); 
-
-    if (error) { 
-        console.error("Erro equipe:", error); 
-        const { data: dataB } = await _supabase.from('usuarios').select('*');
-        if(dataB) { cacheEquipe = dataB; filtrarEquipe(''); return; }
-        return;
-    }
-
-    cacheEquipe = data;
-    exibindoTodos = false; 
-    filtrarEquipe(''); 
-}
-
-function renderizarListaEquipe(lista, mostrarBotao) {
     const container = document.getElementById('lista-equipe-container');
-    if (!lista.length) { container.innerHTML = '<div class="text-center text-gray-400 py-10">Nenhum membro encontrado.</div>'; return; }
+    if (!usuarioLogado || usuarioLogado.perfil !== 'admin' || !container) return;
 
-    let html = `
-    <table class="w-full text-left border-collapse">
-        <thead>
-            <tr class="text-xs font-extrabold text-gray-400 uppercase border-b border-gray-200">
-                <th class="px-6 py-4">Colaborador</th>
-                <th class="px-6 py-4">Status Conta</th>
-                <th class="px-6 py-4">Conexão</th>
-                <th class="px-6 py-4 text-right">Ações</th>
+    container.innerHTML = '<div class="p-8 text-center text-slate-400"><i class="fas fa-circle-notch fa-spin mr-2"></i>Carregando equipe...</div>';
+
+    try {
+        const { data, error } = await _supabase.from('usuarios').select('*').order('nome', { ascending: true });
+        if (error) throw error;
+
+        if(!data.length) { container.innerHTML = '<div class="p-8 text-center text-slate-400">Nenhum membro encontrado.</div>'; return; }
+
+        let html = `
+        <table class="w-full text-left text-sm">
+            <thead class="bg-slate-50 text-slate-500 font-bold border-b border-slate-200">
+                <tr><th class="p-4">Membro</th><th class="p-4">Login</th><th class="p-4">Perfil</th><th class="p-4">Status</th><th class="p-4 text-right">Ações</th></tr>
+            </thead>
+            <tbody class="divide-y divide-slate-100">`;
+
+        html += data.map(u => `
+            <tr class="hover:bg-slate-50 transition">
+                <td class="p-4 font-bold text-slate-700">${u.nome || '---'}</td>
+                <td class="p-4 text-slate-500 font-mono text-xs">${u.username}</td>
+                <td class="p-4"><span class="px-2 py-1 rounded text-xs font-bold ${u.perfil==='admin'?'bg-yellow-100 text-yellow-700':'bg-blue-100 text-blue-700'}">${u.perfil.toUpperCase()}</span></td>
+                <td class="p-4"><span class="px-2 py-1 rounded text-xs font-bold ${u.ativo?'bg-green-100 text-green-700':'bg-red-100 text-red-700'}">${u.ativo ? 'ATIVO' : 'BLOQUEADO'}</span></td>
+                <td class="p-4 text-right">
+                    <button onclick='editarUsuario(${JSON.stringify(u)})' class="text-blue-500 hover:text-blue-700 font-bold text-xs mr-3"><i class="fas fa-pen mr-1"></i>Editar</button>
+                    ${u.username !== usuarioLogado.username ? `<button onclick="excluirUsuario(${u.id})" class="text-red-400 hover:text-red-600 font-bold text-xs"><i class="fas fa-trash"></i></button>` : ''}
+                </td>
             </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">`;
+        `).join('');
 
-    html += lista.map(u => {
-        const statusOnline = getStatusUsuario(u.ultimo_visto);
-        const nomeExibicao = u.nome || u.username;
-        const safeNome = (u.nome || '').replace(/'/g, "\\'");
-        const opacityClass = u.ativo ? '' : 'opacity-50 grayscale';
-        const badgeAtivo = u.ativo 
-            ? '<span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-green-100 text-green-700 border border-green-200">Ativo</span>'
-            : '<span class="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-red-100 text-red-700 border border-red-200">Inativo</span>';
-
-        const clickEdit = `prepararEdicaoUsuario('${u.id}','${u.username}','${u.senha}','${u.perfil}', '${safeNome}', ${u.ativo})`;
-
-        return `
-        <tr class="hover:bg-blue-50/50 transition cursor-pointer group ${opacityClass}" onclick="${clickEdit}">
-            <td class="px-6 py-4">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 rounded-full bg-gray-200 text-gray-600 flex items-center justify-center font-bold text-lg relative shrink-0">
-                        ${nomeExibicao.charAt(0).toUpperCase()}
-                        ${u.ativo ? `<div class="absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${statusOnline.color}"></div>` : ''}
-                    </div>
-                    <div>
-                        <p class="font-bold text-gray-800 text-sm">${nomeExibicao}</p>
-                        <p class="text-xs text-gray-400 font-mono">ID: ${u.username}</p>
-                    </div>
-                </div>
-            </td>
-            <td class="px-6 py-4">
-                <div class="flex flex-col items-start gap-1">
-                    ${badgeAtivo}
-                    <span class="text-[9px] font-bold uppercase text-gray-400">${u.perfil === 'admin' ? 'Administrador' : 'Colaborador'}</span>
-                </div>
-            </td>
-            <td class="px-6 py-4"><p class="text-xs font-bold ${statusOnline.textColor}">${u.ativo ? statusOnline.label : 'Acesso Bloqueado'}</p></td>
-            <td class="px-6 py-4 text-right">
-                <button onclick="event.stopPropagation(); tentarDeletarUsuario('${u.id}','${u.username}', '${nomeExibicao}')" class="text-gray-400 hover:text-red-500 transition p-2 rounded-full hover:bg-red-50" title="Excluir"><i class="fas fa-trash-alt"></i></button>
-            </td>
-        </tr>`;
-    }).join('');
-
-    if (mostrarBotao) {
-        html += `
-        <tr>
-            <td colspan="4" class="text-center py-4 bg-gray-50 border-t border-gray-100">
-                <button onclick="alternarVisualizacao()" class="text-blue-600 hover:text-blue-800 font-bold text-xs hover:underline flex items-center justify-center gap-2 w-full">
-                    <i class="fas fa-chevron-down"></i> Ver todos os ${cacheEquipe.length} membros
-                </button>
-            </td>
-        </tr>`;
-    } else if (exibindoTodos && !mostrarBotao && cacheEquipe.length > 5) {
-        html += `
-        <tr>
-            <td colspan="4" class="text-center py-4 bg-gray-50 border-t border-gray-100">
-                <button onclick="alternarVisualizacao()" class="text-gray-500 hover:text-gray-700 font-bold text-xs hover:underline flex items-center justify-center gap-2 w-full">
-                    <i class="fas fa-chevron-up"></i> Recolher lista
-                </button>
-            </td>
-        </tr>`;
+        html += '</tbody></table>';
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<div class="p-8 text-center text-red-400">Erro ao carregar equipe.</div>';
     }
-
-    html += `</tbody></table>`;
-    container.innerHTML = html;
 }
 
-function getStatusUsuario(dataString) {
-    if (!dataString) return { color: 'bg-gray-400', label: 'Offline', textColor: 'text-gray-400' };
-    const diff = new Date() - new Date(dataString);
-    const minutos = Math.floor(diff / 60000);
-    if (minutos < 2) return { color: 'bg-green-500', label: 'Online', textColor: 'text-green-600' };
-    if (minutos < 60) return { color: 'bg-yellow-500', label: `${minutos}m atrás`, textColor: 'text-yellow-600' };
-    return { color: 'bg-gray-400', label: 'Offline', textColor: 'text-gray-400' };
+// Funções de Modal e CRUD de Usuário
+function abrirModalUsuario() {
+    document.getElementById('id-user-edit').value = '';
+    document.getElementById('nome-novo').value = '';
+    document.getElementById('user-novo').value = '';
+    document.getElementById('pass-novo').value = '';
+    document.getElementById('perfil-novo').value = 'user';
+    document.getElementById('ativo-novo').checked = true;
+    document.getElementById('user-novo').disabled = false;
+    document.getElementById('modal-user-title').innerText = 'Novo Membro';
+    document.getElementById('modal-usuario').classList.remove('hidden');
 }
 
-// --- CRUD ---
-function abrirModalUsuario() { 
-    document.getElementById('id-user-edit').value=''; 
-    document.getElementById('user-novo').value=''; 
-    document.getElementById('nome-novo').value=''; 
-    document.getElementById('pass-novo').value=''; 
-    document.getElementById('perfil-novo').value='user';
-    document.getElementById('ativo-novo').checked = true; 
-    document.getElementById('modal-user-title').innerHTML='Novo Membro'; 
-    document.getElementById('btn-salvar-user').innerText='Criar Conta'; 
-    document.getElementById('modal-usuario').classList.remove('hidden'); 
+function editarUsuario(u) {
+    document.getElementById('id-user-edit').value = u.id;
+    document.getElementById('nome-novo').value = u.nome || '';
+    document.getElementById('user-novo').value = u.username;
+    document.getElementById('user-novo').disabled = true; 
+    document.getElementById('pass-novo').value = u.senha;
+    document.getElementById('perfil-novo').value = u.perfil;
+    document.getElementById('ativo-novo').checked = u.ativo;
+    document.getElementById('modal-user-title').innerText = 'Editar Membro';
+    document.getElementById('modal-usuario').classList.remove('hidden');
 }
 
-function fecharModalUsuario() { document.getElementById('modal-usuario').classList.add('hidden'); }
-
-function prepararEdicaoUsuario(id, username, senha, perfil, nome, ativo) { 
-    document.getElementById('id-user-edit').value = id; 
-    document.getElementById('user-novo').value = username; 
-    document.getElementById('nome-novo').value = nome || ''; 
-    document.getElementById('pass-novo').value = senha; 
-    document.getElementById('perfil-novo').value = perfil || 'user';
-    document.getElementById('ativo-novo').checked = ativo; 
-    document.getElementById('modal-user-title').innerHTML = 'Editar Perfil'; 
-    document.getElementById('btn-salvar-user').innerText = 'Salvar Alterações'; 
-    document.getElementById('modal-usuario').classList.remove('hidden'); 
-}
-
-async function salvarUsuario() { 
-    const id = document.getElementById('id-user-edit').value; 
-    const u = document.getElementById('user-novo').value.trim(); 
-    const n = document.getElementById('nome-novo').value;
-    const p = document.getElementById('pass-novo').value; 
-    const r = document.getElementById('perfil-novo').value;
+async function salvarUsuario() {
+    const id = document.getElementById('id-user-edit').value;
+    const nome = document.getElementById('nome-novo').value;
+    const user = document.getElementById('user-novo').value;
+    const pass = document.getElementById('pass-novo').value;
+    const perfil = document.getElementById('perfil-novo').value;
     const ativo = document.getElementById('ativo-novo').checked;
-    
-    if(!u || !p || !n) return Swal.fire('Erro', 'Preencha todos os campos', 'warning'); 
-    
-    // --- VALIDAÇÃO "TOP" DE DUPLICIDADE ---
-    const gerarHash = (texto) => {
-        return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-    };
 
-    const usuarioExiste = cacheEquipe.find(user => {
-        if (id && user.id == id) return false;
-        
-        // Verifica conflito de LOGIN (ID) -> Exato (case insensitive)
-        const loginConflito = user.username.toLowerCase() === u.toLowerCase();
-        
-        // Verifica conflito de NOME -> Aproximado (ignora pontuação/acento)
-        const nomeConflito = gerarHash(user.nome || '') === gerarHash(n);
+    if(!user || !pass) return Swal.fire('Erro', 'Preencha login e senha', 'warning');
 
-        return loginConflito || nomeConflito;
+    const dados = { username: user, senha: pass, perfil: perfil, ativo: ativo, nome: nome };
+
+    try {
+        if(id) {
+            await _supabase.from('usuarios').update(dados).eq('id', id);
+        } else {
+            const { error } = await _supabase.from('usuarios').insert([dados]);
+            if(error && error.code === '23505') return Swal.fire('Erro', 'Usuário já existe', 'warning');
+            if(error) throw error;
+        }
+        fecharModalUsuario();
+        carregarEquipe();
+        Swal.fire('Sucesso', 'Dados salvos!', 'success');
+    } catch(e) {
+        Swal.fire('Erro', 'Falha ao salvar usuário', 'error');
+    }
+}
+
+async function excluirUsuario(id) {
+    if((await Swal.fire({title:'Tem certeza?', text: "O acesso será revogado.", icon: 'warning', showCancelButton:true})).isConfirmed) {
+        await _supabase.from('usuarios').delete().eq('id', id);
+        carregarEquipe();
+    }
+}
+
+function filtrarEquipe(termo) {
+    const linhas = document.querySelectorAll('#lista-equipe-container tbody tr');
+    linhas.forEach(tr => {
+        if(tr.innerText.toLowerCase().includes(termo)) tr.classList.remove('hidden');
+        else tr.classList.add('hidden');
     });
-
-    if (usuarioExiste) {
-        return Swal.fire('Atenção', 'Já existe um usuário com este Login (ID) ou Nome muito similar.', 'warning');
-    }
-    // --------------------------------------
-
-    const nomeFormatado = n.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
-
-    try { 
-        if(id) { 
-            await _supabase.from('usuarios').update({ username: u, nome: nomeFormatado, senha: p, perfil: r, ativo: ativo }).eq('id', id); 
-            registrarLog('EDITAR_USER', `${u} (${ativo?'Ativo':'Inativado'})`); 
-        } else { 
-            await _supabase.from('usuarios').insert([{username: u, nome: nomeFormatado, senha: p, perfil: r, primeiro_acesso: true, ativo: true}]); 
-            registrarLog('CRIAR_USER', `${u} (${nomeFormatado})`); 
-        } 
-        fecharModalUsuario(); carregarEquipe(); Swal.fire({icon: 'success', title: 'Salvo!', timer: 1500, showConfirmButton: false}); 
-    } catch(e) { Swal.fire('Erro', e.message, 'error'); } 
 }
 
-async function tentarDeletarUsuario(id, username, nomeExibicao) {
-    const { count: qtdLogs } = await _supabase.from('logs').select('*', { count: 'exact', head: true }).eq('usuario', username);
-    const { count: qtdFrases } = await _supabase.from('frases').select('*', { count: 'exact', head: true }).eq('revisado_por', username);
-    const totalVinculos = (qtdLogs || 0) + (qtdFrases || 0);
-
-    if (totalVinculos > 0) {
-        Swal.fire({
-            title: 'Não é possível excluir!',
-            html: `O usuário <b>${nomeExibicao}</b> possui <b>${totalVinculos} registros</b>.<br>Você deve <b>INATIVAR</b> o usuário.`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonText: 'Inativar',
-            cancelButtonText: 'Cancelar',
-            confirmButtonColor: '#d97706'
-        }).then(async (result) => {
-            if (result.isConfirmed) {
-                await _supabase.from('usuarios').update({ ativo: false }).eq('id', id);
-                registrarLog('EDITAR_USER', `Inativou ${username}`);
-                carregarEquipe();
-                Swal.fire('Inativado', 'Usuário inativado.', 'success');
-            }
-        });
-    } else {
-        if((await Swal.fire({title: 'Excluir?', text: "Sem histórico vinculado.", icon: 'warning', showCancelButton: true, confirmButtonColor: '#d33', confirmButtonText: 'Sim, excluir'})).isConfirmed) {
-            await _supabase.from('usuarios').delete().eq('id', id);
-            registrarLog('EXCLUIR_USER', username);
-            carregarEquipe();
-            Swal.fire('Removido', '', 'success');
-        }
-    }
-}
-
-// Funções Auxiliares (Backup, Gerenciadores e NOVA IMPORTAÇÃO)
-async function abrirGerenciadorMotivos() { const { data: frases } = await _supabase.from('frases').select('motivo'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.motivo || "Sem Motivo"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-motivos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-orange-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearMotivo('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-motivos').classList.remove('hidden'); }
-async function renomearMotivo(nomeAntigo) { const { value: novoNome } = await Swal.fire({title: 'Renomear Motivo', html: `Todas as frases com motivo <b>"${nomeAntigo}"</b> serão alteradas.`, input: 'text', inputValue: nomeAntigo, showCancelButton: true, confirmButtonText: 'Salvar'}); if (novoNome && novoNome !== nomeAntigo) { const nomeFormatado = formatarTextoBonito(novoNome, 'titulo'); Swal.fire({ title: 'Atualizando...', didOpen: () => Swal.showLoading() }); const { error } = await _supabase.from('frases').update({ motivo: nomeFormatado }).eq('motivo', nomeAntigo); if (!error) { registrarLog('EDITAR', `Renomeou motivo "${nomeAntigo}"`); abrirGerenciadorMotivos(); Swal.fire('Sucesso', '', 'success'); } else Swal.fire('Erro', '', 'error'); } }
-async function abrirGerenciadorDocumentos() { const { data: frases } = await _supabase.from('frases').select('documento'); if(!frases) return; const contagem = {}; frases.forEach(f => { const nome = f.documento || "Sem Doc"; contagem[nome] = (contagem[nome] || 0) + 1; }); const listaAgrupada = Object.entries(contagem).map(([nome, qtd]) => ({ nome, qtd })).sort((a, b) => a.nome.localeCompare(b.nome)); const tbody = document.getElementById('lista-documentos-unificacao'); tbody.innerHTML = listaAgrupada.map(m => `<tr class="hover:bg-blue-50 transition"><td class="px-6 py-3 font-bold text-gray-700">${m.nome}</td><td class="px-6 py-3 text-center"><span class="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-bold">${m.qtd}</span></td><td class="px-6 py-3 text-right"><button onclick="renomearDocumento('${m.nome}')" class="text-blue-600 hover:text-blue-800 text-xs font-bold bg-white border border-blue-200 px-3 py-1 rounded hover:bg-blue-50 transition"><i class="fas fa-edit mr-1"></i> Renomear / Mesclar</button></td></tr>`).join(''); document.getElementById('modal-documentos').classList.remove('hidden'); }
-async function renomearDocumento(nomeAntigo) { const { value: novoNome } = await Swal.fire({title: 'Renomear Documento', html: `Todos os registros de <b>"${nomeAntigo}"</b> serão alterados.`, input: 'text', inputValue: nomeAntigo, showCancelButton: true, confirmButtonText: 'Salvar'}); if (novoNome && novoNome !== nomeAntigo) { const nomeFormatado = formatarTextoBonito(novoNome, 'titulo'); Swal.fire({ title: 'Atualizando...', didOpen: () => Swal.showLoading() }); const { error } = await _supabase.from('frases').update({ documento: nomeFormatado }).eq('documento', nomeAntigo); if (!error) { registrarLog('EDITAR', `Renomeou documento "${nomeAntigo}"`); abrirGerenciadorDocumentos(); Swal.fire('Sucesso', '', 'success'); } else Swal.fire('Erro', '', 'error'); } }
-async function padronizarTodasFrases() { if(!(await Swal.fire({title: 'Padronizar TUDO?', text: 'Isso vai corrigir formatação e aspas em todas as frases.', icon: 'question', showCancelButton: true})).isConfirmed) return; Swal.fire({ title: 'Processando...', didOpen: () => Swal.showLoading() }); try { const { data: frases } = await _supabase.from('frases').select('*'); let count = 0; for (const f of frases) { const novoConteudo = limparTexto(f.conteudo); const novaEmpresa = formatarTextoBonito(f.empresa, 'titulo'); const novoMotivo = formatarTextoBonito(f.motivo, 'titulo'); const novoDoc = formatarTextoBonito(f.documento, 'titulo'); if (novoConteudo !== f.conteudo || novaEmpresa !== f.empresa || novoMotivo !== f.motivo || novoDoc !== f.documento) { await _supabase.from('frases').update({conteudo: novoConteudo, empresa: novaEmpresa, motivo: novoMotivo, documento: novoDoc}).eq('id', f.id); count++; } } if(count > 0) { registrarLog('LIMPEZA', `Padronizou ${count} frases`); Swal.fire('Sucesso!', `${count} frases corrigidas.`, 'success'); } else Swal.fire('Tudo certo!', 'Já estava tudo padronizado.', 'info'); } catch (e) { Swal.fire('Erro', '', 'error'); } }
-function limparTexto(texto) { if (!texto) return ""; let t = texto.trim(); t = t.replace(/^["']+|["']+$/g, ''); t = t.replace(/\s+/g, ' '); t = t.charAt(0).toUpperCase() + t.slice(1); return t; }
-async function baixarBackup() { const { data: f } = await _supabase.from('frases').select('*'); const { data: u } = await _supabase.from('usuarios').select('*'); const { data: l } = await _supabase.from('logs').select('*'); const blob = new Blob([JSON.stringify({ data: new Date(), sistema: 'Gupy Frases', dados: { frases: f, usuarios: u, logs: l } })], { type: "application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `backup_gupy_${new Date().toISOString().slice(0,10)}.json`; a.click(); }
-async function importarBackup(input) { const file = input.files[0]; if(!file) return; const r = new FileReader(); r.onload = async(e) => { try { const b = JSON.parse(e.target.result); Swal.fire({title: 'Restaurando...', didOpen: () => Swal.showLoading()}); if(b.dados.usuarios) await _supabase.from('usuarios').upsert(b.dados.usuarios); if(b.dados.frases) await _supabase.from('frases').upsert(b.dados.frases); if(b.dados.logs) await _supabase.from('logs').upsert(b.dados.logs); Swal.fire('Restaurado!', '', 'success').then(()=>location.reload()); } catch(err){ Swal.fire('Erro', err.message, 'error'); } }; r.readAsText(file); input.value = ''; }
-
-// --- NOVA FUNÇÃO DE IMPORTAÇÃO (XLSX) ---
-function importarPlanilhaFrases() { document.getElementById('input-import-sheet').click(); }
-
-async function processarArquivoFrases(input) {
-    const file = input.files[0];
-    if(!file) return;
-
-    Swal.fire({ title: 'Processando Planilha...', html: 'Aguarde enquanto lemos e validamos os dados.', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        try {
-            const data = new Uint8Array(e.target.result);
-            const workbook = XLSX.read(data, {type: 'array'});
-            const firstSheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[firstSheetName];
-            const jsonDados = XLSX.utils.sheet_to_json(worksheet);
-
-            if (!jsonDados.length) {
-                input.value = ''; // Limpa o input
-                return Swal.fire('Vazio', 'A planilha não contém dados.', 'warning');
-            }
-
-            // Carrega frases existentes para evitar duplicatas
-            const { data: frasesExistentes } = await _supabase.from('frases').select('conteudo');
-            
-            // Função auxiliar de hash (igual à da biblioteca.js) para comparação "top"
-            const gerarHash = (texto) => {
-                if(!texto) return "";
-                return texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-            };
-
-            const hashesExistentes = new Set((frasesExistentes || []).map(f => gerarHash(f.conteudo)));
-            
-            let importados = 0;
-            let duplicados = 0;
-            const loteParaInserir = [];
-
-            for (const linha of jsonDados) {
-                // Tenta mapear nomes de colunas comuns
-                const empresa = linha['Empresa'] || linha['empresa'] || 'Geral';
-                const motivo = linha['Motivo'] || linha['motivo'] || 'Importado';
-                const conteudo = linha['Conteúdo'] || linha['conteudo'] || linha['Frase'] || linha['frase'];
-                const documento = linha['Documento'] || linha['documento'] || 'Doc';
-
-                if (!conteudo) continue; // Pula linha sem frase
-
-                // Limpeza básica
-                let conteudoLimpo = conteudo.toString().trim();
-                conteudoLimpo = conteudoLimpo.charAt(0).toUpperCase() + conteudoLimpo.slice(1);
-                
-                const hashAtual = gerarHash(conteudoLimpo);
-
-                if (hashesExistentes.has(hashAtual)) {
-                    duplicados++;
-                } else {
-                    // Prepara o objeto para inserção
-                    loteParaInserir.push({
-                        empresa: formatarTextoBonito(empresa.toString(), 'titulo'),
-                        motivo: formatarTextoBonito(motivo.toString(), 'titulo'),
-                        documento: formatarTextoBonito(documento.toString(), 'titulo'),
-                        conteudo: conteudoLimpo,
-                        revisado_por: usuarioLogado.username
-                    });
-                    
-                    // Adiciona ao set temporário para evitar duplicatas DENTRO da própria planilha
-                    hashesExistentes.add(hashAtual);
-                    importados++;
-                }
-            }
-
-            if (loteParaInserir.length > 0) {
-                // Insere em massa
-                const { error } = await _supabase.from('frases').insert(loteParaInserir);
-                if (error) throw error;
-                
-                await registrarLog('IMPORTACAO', `Importou ${importados} frases via Excel`);
-                
-                Swal.fire({
-                    title: 'Importação Concluída!',
-                    html: `<b>${importados}</b> frases novas adicionadas.<br><b>${duplicados}</b> duplicatas ignoradas.`,
-                    icon: 'success'
-                });
-            } else {
-                Swal.fire('Nada novo', `Todas as ${duplicados} frases da planilha já existiam no sistema.`, 'info');
-            }
-
-        } catch (err) {
-            console.error(err);
-            Swal.fire('Erro na Importação', 'Verifique se o arquivo é um Excel/CSV válido.', 'error');
-        } finally {
-            input.value = ''; // Limpa o input para permitir re-seleção do mesmo arquivo se necessário
-        }
-    };
-    reader.readAsArrayBuffer(file);
+function baixarBackup() {
+    // Implementação simples de backup JSON
+    _supabase.from('frases').select('*').then(({data}) => {
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type : 'application/json'});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `backup_frases_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+    });
 }
