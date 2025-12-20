@@ -5,7 +5,6 @@ let dashboardSubscription = null;
 async function carregarDashboard() {
     const painel = document.getElementById('painel-dashboard');
     
-    // Segurança visual
     if (!usuarioLogado || usuarioLogado.perfil !== 'admin') {
         if(painel) painel.classList.add('hidden');
         return; 
@@ -13,13 +12,12 @@ async function carregarDashboard() {
     if(painel) painel.classList.remove('hidden');
 
     try {
-        // Exibe loading se for a primeira vez
         const tabela = document.getElementById('lista-top-users');
         if(!tabela || tabela.innerHTML === '') exibirCarregando();
         
-        // --- 1. BUSCA DE DADOS (Otimizada) ---
+        // --- 1. BUSCA DE DADOS ---
         
-        // Mapa de Nomes
+        // Mapa de Nomes (Para transformar ID em Nome Real)
         const { data: usuariosData } = await _supabase.from('usuarios').select('username, nome');
         const mapaNomes = {};
         if (usuariosData) {
@@ -34,39 +32,47 @@ async function carregarDashboard() {
         dataCorte.setDate(dataCorte.getDate() - 90);
         const { data: semUso90d } = await _supabase.from('frases').select('*').or(`ultimo_uso.lt.${dataCorte.toISOString()},ultimo_uso.is.null`).order('ultimo_uso', { ascending: true });
         
-        // CORREÇÃO DO LIMITE DE 1000
-        // 1. Para o KPI Total: Pedimos ao banco apenas o NÚMERO (count), sem baixar os dados. É rápido e ilimitado.
+        // TOTAL GERAL (KPI) - Usa count exact do banco
         const { count: totalInteracoesReal } = await _supabase.from('logs').select('*', { count: 'exact', head: true });
-
-        // 2. Para o Ranking: Baixamos os últimos 5000 logs para calcular quem está mais ativo recentemente.
-        // O limite padrão é 1000, por isso o ranking podia estar impreciso.
-        const { data: logsParaRanking } = await _supabase
-            .from('logs')
-            .select('usuario')
-            .order('data_hora', { ascending: false }) // Pega os mais recentes
-            .limit(5000); 
-        
         const { count: totalFrases } = await _supabase.from('frases').select('*', { count: 'exact', head: true });
         
-        // --- 2. PROCESSAMENTO ---
+        // RANKINGS (Agora via VIEW - 100% Preciso e sem limite de 1000)
+        // Busca os Top 5
+        const { data: rankingTop } = await _supabase.from('view_ranking_usuarios').select('*').order('qtd_acoes', { ascending: false }).limit(5);
         
-        const rankingUsuarios = processarRankingUsuarios(logsParaRanking, mapaNomes);
+        // Busca os Bottom 5 (Menos ativos, mas com alguma ação)
+        const { data: rankingBottom } = await _supabase.from('view_ranking_usuarios').select('*').order('qtd_acoes', { ascending: true }).limit(5);
+
+        // --- 2. PROCESSAMENTO ---
         
         const topLista = topFrases || [];
         const idsTop = topLista.map(f => f.id);
         const lowLista = (lowCandidates || []).filter(f => !idsTop.includes(f.id)).slice(0, 5);
 
+        // Processa nomes para o Ranking
+        const processarRanking = (lista) => {
+            if(!lista) return [];
+            return lista.map(item => ({
+                username: item.usuario,
+                nome: mapaNomes[item.usuario] || formatarNomeUser(item.usuario),
+                qtd: item.qtd_acoes
+            }));
+        };
+
+        const listaTopUsers = processarRanking(rankingTop);
+        const listaBottomUsers = processarRanking(rankingBottom);
+
         // --- 3. RENDERIZAÇÃO ---
 
         renderizarKPIs({ 
-            totalUsos: totalInteracoesReal || 0, // Agora usa o count real do banco
+            totalUsos: totalInteracoesReal || 0,
             totalFrases: totalFrases || 0, 
             totalInativas: semUso90d?.length || 0, 
-            totalUsers: rankingUsuarios.all.length 
+            totalUsers: Object.keys(mapaNomes).length 
         });
         
-        renderizarTabelaUsuarios(rankingUsuarios.top5, 'lista-top-users', 'green');
-        renderizarTabelaUsuarios(rankingUsuarios.bottom5, 'lista-bottom-users', 'gray');
+        renderizarTabelaUsuarios(listaTopUsers, 'lista-top-users', 'green');
+        renderizarTabelaUsuarios(listaBottomUsers, 'lista-bottom-users', 'gray');
         renderizarTopFrases(topLista, 'lista-top-frases');
         renderizarLowFrases(lowLista, 'lista-low-frases');
         renderizarFrasesSemUso(semUso90d || [], mapaNomes);
@@ -82,19 +88,10 @@ async function carregarDashboard() {
 function iniciarRealtimeDashboard() {
     if (dashboardSubscription) return;
 
-    console.log("🔌 Iniciando conexão Realtime...");
-
-    dashboardSubscription = _supabase.channel('dashboard-v3-fix') // Nome novo para garantir reset
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'logs' }, () => {
-            console.log('⚡ Novo log detectado -> Atualizando...');
-            atualizarAposDelay();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'frases' }, () => {
-            atualizarAposDelay();
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => {
-            atualizarAposDelay();
-        })
+    dashboardSubscription = _supabase.channel('dashboard-v4-view')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'logs' }, () => atualizarAposDelay())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'frases' }, () => atualizarAposDelay())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'usuarios' }, () => atualizarAposDelay())
         .subscribe();
 }
 
@@ -103,42 +100,15 @@ function atualizarAposDelay() {
     clearTimeout(timeoutUpdate);
     timeoutUpdate = setTimeout(() => {
         carregarDashboard();
-    }, 1000); // Espera 1s para acumular alterações e não piscar a tela
+    }, 1000);
 }
 
 // --- FUNÇÕES AUXILIARES ---
 
-function processarRankingUsuarios(logs, mapaNomes) {
-    if(!logs) return { top5: [], bottom5: [], all: [] };
-    
-    const contagem = {};
-    logs.forEach(l => {
-        if(l.usuario) contagem[l.usuario] = (contagem[l.usuario] || 0) + 1;
-    });
-
-    const arrayUsers = Object.entries(contagem).map(([user, qtd]) => ({
-        username: user,
-        nome: mapaNomes[user] || formatarNomeUser(user), 
-        qtd: qtd
-    }));
-
-    arrayUsers.sort((a, b) => b.qtd - a.qtd);
-
-    const top5 = arrayUsers.slice(0, 5);
-    const topUsersIds = top5.map(u => u.username);
-    let bottom5 = [...arrayUsers].reverse().filter(u => !topUsersIds.includes(u.username)).slice(0, 5);
-    
-    if(arrayUsers.length < 10 && bottom5.length === 0 && arrayUsers.length > 0) {
-         bottom5 = [...arrayUsers].reverse().slice(0, 5);
-    }
-
-    return { top5, bottom5, all: arrayUsers };
-}
-
-function formatarNomeUser(u) { return u.charAt(0).toUpperCase() + u.slice(1); }
+function formatarNomeUser(u) { return u ? u.charAt(0).toUpperCase() + u.slice(1) : 'Usuário'; }
 
 function exibirCarregando() {
-    const loading = '<tr><td colspan="4" class="p-4 text-center text-slate-400 animate-pulse text-xs"><i class="fas fa-sync fa-spin mr-2"></i>Calculando métricas...</td></tr>';
+    const loading = '<tr><td colspan="4" class="p-4 text-center text-slate-400 animate-pulse text-xs"><i class="fas fa-sync fa-spin mr-2"></i>Calculando...</td></tr>';
     ['lista-top-users', 'lista-bottom-users', 'lista-top-frases', 'lista-low-frases', 'lista-frases-sem-uso'].forEach(id => {
         const el = document.getElementById(id); if(el) el.innerHTML = loading;
     });
@@ -160,7 +130,7 @@ function renderizarKPIs(stats) {
 function renderizarTabelaUsuarios(lista, elementId, corTheme) {
     const tbody = document.getElementById(elementId);
     if (!tbody) return;
-    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Sem dados recentes.</td></tr>'; return; }
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-4 text-center text-xs text-gray-400">Sem dados.</td></tr>'; return; }
 
     tbody.innerHTML = lista.map((u, i) => `
         <tr class="border-b border-slate-50 last:border-0 hover:bg-slate-50 transition">
@@ -222,7 +192,7 @@ function renderizarLowFrases(lista, elementId) {
 function renderizarFrasesSemUso(lista, mapaNomes) {
     const tbody = document.getElementById('lista-frases-sem-uso');
     if (!tbody) return;
-    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-6 text-center text-green-600 bg-green-50/50 rounded-lg text-sm font-bold"><i class="fas fa-check-circle mr-2"></i>Tudo limpo!</td></tr>'; return; }
+    if (!lista.length) { tbody.innerHTML = '<tr><td class="p-6 text-center text-green-600 bg-green-50/50 rounded-lg text-sm font-bold"><i class="fas fa-check-circle mr-2"></i>Tudo limpo (90d)!</td></tr>'; return; }
 
     tbody.innerHTML = lista.map(f => {
         let diasSemUso = "Nunca";
@@ -245,6 +215,6 @@ async function deletarFraseDashboard(id) {
     const result = await Swal.fire({title: 'Limpar frase?', text: `Frase #${id} inativa.`, icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Sim, excluir'});
     if (result.isConfirmed) {
         await _supabase.from('frases').delete().eq('id', id);
-        // Não precisa registrarLog aqui pois o trigger do banco já avisa o dashboard para atualizar
+        registrarLog('LIMPEZA', `Dashboard: Removeu frase #${id}`);
     }
 }
