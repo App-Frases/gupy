@@ -154,24 +154,25 @@ function limparFiltros() {
 function padronizarFraseInteligente(texto) {
     if (!texto) return "";
     
-    // 1. Remove espaços extras (inicio, fim e duplos no meio)
+    // 1. Remove espaços extras
     let t = texto.replace(/\s+/g, ' ').trim();
     
-    // 2. Corrige pontuação (remove espaço antes de vírgula/ponto, garante espaço depois)
-    // Remove espaço antes: "olá , mundo" -> "olá, mundo"
-    t = t.replace(/\s+([.,!?;:])/g, '$1');
-    // Adiciona espaço depois se não houver: "olá,mundo" -> "olá, mundo" (exceto se for fim da string ou números 1.2)
-    t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 ');
+    // 2. NOVO: Remove aspas do início e fim
+    // Ex: "Olá" -> Olá (Remove aspas duplas)
+    t = t.replace(/^"+|"+$/g, '');
+    
+    // 3. Limpa novamente (caso as aspas escondessem espaços como em ' " ola " ')
+    t = t.trim();
 
-    // 3. Capitalização (Sentence Case) 
-    // Se o texto for > 5 chars e estiver TUDO EM MAIÚSCULO, converte para minúsculo
-    // (Evita gritaria, mas mantém siglas curtas como "GUPY" se for o caso)
+    // 4. Corrige pontuação
+    t = t.replace(/\s+([.,!?;:])/g, '$1'); // Remove espaço antes de pontuação
+    t = t.replace(/([.,!?;:])(?=[^\s\d])/g, '$1 '); // Garante espaço depois
+
+    // 5. Capitalização
     const letras = t.replace(/[^a-zA-Z]/g, '');
     if (letras.length > 4 && letras === letras.toUpperCase()) {
         t = t.toLowerCase();
     }
-    
-    // Garante primeira letra maiúscula
     t = t.charAt(0).toUpperCase() + t.slice(1);
 
     return t;
@@ -205,16 +206,16 @@ async function salvarFrase() {
     const rawConteudo = document.getElementById('inp-conteudo').value;
     
     // --- PADRONIZAÇÃO AQUI ---
+    // Agora remove as aspas do início/fim automaticamente
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
     
     if(!conteudoLimpo) return Swal.fire('Erro', 'Conteúdo obrigatório', 'warning'); 
 
     // --- VALIDAÇÃO DE DUPLICIDADE ---
-    // Compara ignorando pontuação e espaços
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
 
     const duplicada = cacheFrases.some(f => {
-        if (id && f.id == id) return false; // Ignora a própria frase se estiver editando
+        if (id && f.id == id) return false; 
         const bancoPuro = normalizar(f.conteudo).replace(/[^\w]/g, '');
         return inputPuro === bancoPuro;
     });
@@ -222,7 +223,7 @@ async function salvarFrase() {
     if (duplicada) {
         return Swal.fire({
             title: 'Frase Duplicada',
-            text: 'Esta frase já existe na biblioteca (mesmo com pontuação diferente). O sistema padronizou sua entrada para verificar.',
+            text: 'Esta frase já existe na biblioteca (mesmo com pontuação ou aspas diferentes).',
             icon: 'warning'
         });
     }
