@@ -1,42 +1,102 @@
 // Local: js/logs.js
 
 let logsSubscription = null;
-let listaLogsAtual = []; // Cache dos logs iniciais (timeline padrão)
+let filtroCategoriaAtual = 'TODOS';
+let termoBuscaAtual = '';
 
+// Inicia o carregamento (reseta filtros para o padrão)
 async function carregarLogs() {
+    filtroCategoriaAtual = 'TODOS';
+    termoBuscaAtual = '';
+    
+    // Reseta visual dos botões
+    document.querySelectorAll('.btn-filtro-log').forEach(btn => {
+        if(btn.dataset.cat === 'TODOS') {
+            btn.classList.remove('bg-slate-100', 'text-slate-600');
+            btn.classList.add('bg-slate-800', 'text-white');
+        } else {
+            btn.classList.add('bg-slate-100', 'text-slate-600');
+            btn.classList.remove('bg-slate-800', 'text-white');
+        }
+    });
+
+    executarConsultaLogs();
+
+    if (!logsSubscription) {
+        logsSubscription = _supabase.channel('logs-realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, () => {
+                // Só atualiza em tempo real se não houver busca ativa para não atrapalhar
+                if(filtroCategoriaAtual === 'TODOS' && termoBuscaAtual === '') {
+                    executarConsultaLogs();
+                }
+            })
+            .subscribe();
+    }
+}
+
+// Chamado pelos botões de categoria
+function filtrarPorCategoriaLog(cat) {
+    filtroCategoriaAtual = cat;
+
+    // Atualiza classes visuais
+    document.querySelectorAll('.btn-filtro-log').forEach(btn => {
+        if(btn.dataset.cat === cat) {
+            btn.classList.remove('bg-slate-100', 'text-slate-600');
+            btn.classList.add('bg-slate-800', 'text-white');
+        } else {
+            btn.classList.add('bg-slate-100', 'text-slate-600');
+            btn.classList.remove('bg-slate-800', 'text-white');
+        }
+    });
+
+    executarConsultaLogs();
+}
+
+// Chamado pela barra de busca global (via app.js)
+function filtrarLogs(termo) {
+    termoBuscaAtual = termo;
+    executarConsultaLogs();
+}
+
+// Função central que busca no banco considerando TODOS os filtros
+async function executarConsultaLogs() {
     const container = document.getElementById('container-logs-agrupados');
     if(!container) return;
-    
-    // Se estiver vazio, mostra loading
-    if(container.innerHTML === '') {
-        container.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400 animate-pulse flex flex-col items-center gap-2"><i class="fas fa-satellite-dish fa-2x"></i><span class="text-xs font-bold uppercase tracking-widest">Sincronizando timeline...</span></div>';
-    }
+
+    container.innerHTML = '<div class="col-span-full py-10 text-center text-blue-500 flex flex-col items-center gap-2 animate-pulse"><i class="fas fa-circle-notch fa-spin text-2xl"></i><span class="text-xs font-bold uppercase">Carregando histórico...</span></div>';
 
     try {
-        // CORREÇÃO 1: Aumentado o limite para 500 para trazer mais histórico inicial
-        const { data: logs, error } = await _supabase
+        let query = _supabase
             .from('view_logs_detalhados') 
             .select('*')
             .order('data_hora', { ascending: false })
             .limit(500);
+
+        // 1. Aplica filtro de Categoria (se não for TODOS)
+        if (filtroCategoriaAtual !== 'TODOS') {
+            // Tratamento especial para "COPIAR" que inclui ranking
+            if (filtroCategoriaAtual === 'COPIAR') {
+                query = query.in('acao', ['COPIAR', 'COPIAR_RANK']);
+            } else {
+                query = query.eq('acao', filtroCategoriaAtual);
+            }
+        }
+
+        // 2. Aplica busca por Texto (se houver)
+        if (termoBuscaAtual && termoBuscaAtual.trim() !== '') {
+            const t = termoBuscaAtual.trim();
+            // Busca no nome, usuario ou detalhe
+            query = query.or(`nome_real.ilike.%${t}%,username.ilike.%${t}%,detalhe.ilike.%${t}%`);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
             if(error.code === '42P01') throw new Error("VIEW_MISSING");
             throw error;
         }
 
-        listaLogsAtual = logs || []; // Salva na memória para quando limpar a busca
-        renderizarLogs(listaLogsAtual);
-
-        // Realtime (apenas para novos logs enquanto assiste)
-        if (!logsSubscription) {
-            logsSubscription = _supabase.channel('logs-realtime')
-                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, () => {
-                    // Atualiza silenciosamente para não quebrar a busca do usuário
-                    atualizarLogsEmTempoReal();
-                })
-                .subscribe();
-        }
+        renderizarLogs(data);
 
     } catch (e) {
         console.error("Erro Logs:", e);
@@ -48,79 +108,24 @@ async function carregarLogs() {
     }
 }
 
-// Função auxiliar para atualizar sem piscar a tela
-async function atualizarLogsEmTempoReal() {
-    const inputBusca = document.getElementById('global-search');
-    // Só atualiza automático se o usuário NÃO estiver pesquisando
-    if (inputBusca && inputBusca.value.trim() !== '') return;
-
-    const { data } = await _supabase
-        .from('view_logs_detalhados') 
-        .select('*')
-        .order('data_hora', { ascending: false })
-        .limit(500);
-    
-    if (data) {
-        listaLogsAtual = data;
-        renderizarLogs(data);
-    }
-}
-
-// CORREÇÃO 2: Busca Real no Banco de Dados
-async function filtrarLogs(termo) {
-    const container = document.getElementById('container-logs-agrupados');
-    
-    // Se limpou a busca, restaura a lista inicial (cache)
-    if (!termo || termo.trim() === '') {
-        renderizarLogs(listaLogsAtual);
-        return;
-    }
-
-    // Feedback visual de busca
-    container.innerHTML = '<div class="col-span-full py-10 text-center text-blue-500 flex flex-col items-center gap-2 animate-pulse"><i class="fas fa-search fa-spin text-2xl"></i><span class="text-xs font-bold uppercase">Buscando em todo o histórico...</span></div>';
-
-    try {
-        // Busca no Supabase usando ILIKE (case insensitive)
-        // Pesquisa no nome do usuário, na ação ou no detalhe
-        const { data, error } = await _supabase
-            .from('view_logs_detalhados') 
-            .select('*')
-            .or(`nome_real.ilike.%${termo}%,username.ilike.%${termo}%,acao.ilike.%${termo}%,detalhe.ilike.%${termo}%`)
-            .order('data_hora', { ascending: false })
-            .limit(100); // Traz os 100 resultados mais relevantes da busca
-
-        if (error) throw error;
-
-        if (!data || data.length === 0) {
-            container.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10"><i class="far fa-sad-tear text-2xl mb-2"></i><p>Nada encontrado para "${termo}"</p></div>`;
-        } else {
-            renderizarLogs(data);
-        }
-
-    } catch (e) {
-        console.error("Erro na busca:", e);
-        container.innerHTML = '<div class="col-span-full text-center text-red-400 text-sm">Erro ao buscar no histórico.</div>';
-    }
-}
-
 function renderizarLogs(lista) {
     const container = document.getElementById('container-logs-agrupados');
     
     if(!lista || !lista.length) { 
-        container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 flex flex-col items-center"><i class="far fa-clock text-4xl mb-3 text-slate-200"></i><p class="text-sm">Sem registros.</p></div>'; 
+        container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 flex flex-col items-center"><i class="far fa-clock text-4xl mb-3 text-slate-200"></i><p class="text-sm">Nenhum registro encontrado para este filtro.</p></div>'; 
         return; 
     }
     
     const grupos = {};
     
-    lista.forEach((log, index) => {
+    lista.forEach(log => {
         const dataObj = new Date(log.data_hora);
         const dataExtensa = dataObj.toLocaleDateString('pt-BR', { 
             weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
         });
         
         if(!grupos[dataExtensa]) grupos[dataExtensa] = [];
-        grupos[dataExtensa].push({ ...log, indexOriginal: index });
+        grupos[dataExtensa].push(log);
     });
 
     container.innerHTML = Object.keys(grupos).map(dataKey => {
@@ -166,8 +171,6 @@ function criarCardLog(log) {
         else resumoDetalhe = log.detalhe.length > 25 ? log.detalhe.substring(0, 25) + '...' : log.detalhe;
     }
 
-    // Correção: Passamos o log inteiro no onclick para não depender do índice do array (que muda na busca)
-    // Precisamos escapar as aspas para não quebrar o HTML
     const logSafe = JSON.stringify(log).replace(/"/g, '&quot;');
 
     return `
@@ -195,7 +198,6 @@ function criarCardLog(log) {
     `;
 }
 
-// Nova função para abrir modal recebendo o objeto direto (funciona melhor com busca)
 function abrirModalLogDireto(log) {
     if(!log) return;
 
