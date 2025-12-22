@@ -63,13 +63,9 @@ async function copiarTexto(id) {
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
 
-        // AQUI ESTÁ A CORREÇÃO:
-        // Apenas registramos o Log. O Trigger SQL que criamos vai atualizar a tabela 'frases' sozinho.
-        // Removemos o comando "_supabase.from('frases').update..." para evitar sobrescrever com valor antigo.
         await registrarLog('COPIAR', String(id)); 
 
-        // Atualização Otimista (Visual apenas) para o usuário ver na hora
-        // (Nota: na próxima recarga, virá o valor correto do banco)
+        // Atualização Otimista (Visual apenas)
         f.usos = (f.usos || 0) + 1;
         f.meus_usos = (f.meus_usos || 0) + 1;
 
@@ -135,7 +131,8 @@ function renderizarBiblioteca(lista, isTop4) {
     
     const cards = lista.map(f => {
         const idSafe = f.id;
-        const objSafe = JSON.stringify(f).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+        // CORREÇÃO: Não passamos mais o objeto JSON no HTML, passamos apenas o ID.
+        // Isso evita erros de sintaxe quando a frase tem aspas ou caracteres especiais.
         
         let textoContador;
         let iconeContador;
@@ -164,9 +161,9 @@ function renderizarBiblioteca(lista, isTop4) {
                     <h4 class="font-extrabold text-slate-800 text-sm leading-tight">${f.motivo||'Sem título'}</h4>
                 </div>
                 <div class="flex shrink-0 items-center gap-1">
-                    <button onclick="copiarTexto(${idSafe})" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5" title="Copiar"><i class="far fa-copy"></i> Copiar</button>
-                    <button onclick='editarFrase(${objSafe})' class="bg-white border border-yellow-200 text-yellow-600 hover:bg-yellow-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Editar"><i class="fas fa-pen"></i></button>
-                    <button onclick="deletarFraseBiblioteca(${idSafe})" class="bg-white border border-red-200 text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Excluir"><i class="fas fa-trash-alt"></i></button>
+                    <button onclick="copiarTexto('${idSafe}')" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5" title="Copiar"><i class="far fa-copy"></i> Copiar</button>
+                    <button onclick="prepararEdicao('${idSafe}')" class="bg-white border border-yellow-200 text-yellow-600 hover:bg-yellow-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Editar"><i class="fas fa-pen"></i></button>
+                    <button onclick="deletarFraseBiblioteca('${idSafe}')" class="bg-white border border-red-200 text-red-500 hover:bg-red-50 px-2 py-1.5 rounded-lg font-bold transition shadow-sm" title="Excluir"><i class="fas fa-trash-alt"></i></button>
                 </div>
             </div>
             <div class="px-5 py-4 flex-grow"><p class="text-sm text-slate-700 font-medium whitespace-pre-wrap leading-relaxed select-all">${f.conteudo}</p></div>
@@ -194,6 +191,14 @@ function atualizarSugestoesModal() {
     preencher('list-docs', 'documento');
 }
 
+// --- CORREÇÃO: Função que estava faltando ---
+function padronizarFraseInteligente(texto) {
+    if (!texto) return "";
+    // Remove espaços extras e garante que a primeira letra seja maiúscula
+    const t = texto.trim().replace(/\s+/g, ' ');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 // --- CRUD ---
 function abrirModalFrase() { 
     document.getElementById('id-frase').value=''; 
@@ -206,13 +211,17 @@ function abrirModalFrase() {
     document.getElementById('modal-frase').classList.remove('hidden'); 
 }
 
-function editarFrase(f) { 
-    if(typeof f === 'string') f = JSON.parse(f);
+// CORREÇÃO: Função renomeada para prepararEdicao e busca pelo ID
+function prepararEdicao(id) { 
+    // Busca a frase no cache usando o ID
+    const f = cacheFrases.find(item => item.id == id);
+    if (!f) return Swal.fire('Erro', 'Frase não encontrada.', 'error');
+
     document.getElementById('id-frase').value = f.id; 
-    document.getElementById('inp-empresa').value = f.empresa; 
-    document.getElementById('inp-motivo').value = f.motivo; 
-    document.getElementById('inp-doc').value = f.documento; 
-    document.getElementById('inp-conteudo').value = f.conteudo; 
+    document.getElementById('inp-empresa').value = f.empresa || ''; 
+    document.getElementById('inp-motivo').value = f.motivo || ''; 
+    document.getElementById('inp-doc').value = f.documento || ''; 
+    document.getElementById('inp-conteudo').value = f.conteudo || ''; 
     document.getElementById('modal-title').innerHTML = `Editar #${f.id}`; 
     atualizarSugestoesModal();
     document.getElementById('modal-frase').classList.remove('hidden'); 
@@ -229,8 +238,10 @@ async function salvarFrase() {
         return Swal.fire({title: 'Campos Obrigatórios', text: 'Por favor, preencha todos os campos.', icon: 'warning', confirmButtonColor: '#3b82f6'});
     }
     
+    // Agora a função existe e vai funcionar
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
+    
     const duplicada = cacheFrases.some(f => {
         if (id && f.id == id) return false; 
         const bancoPuro = normalizar(f.conteudo).replace(/[^\w]/g, '');
@@ -258,14 +269,33 @@ async function salvarFrase() {
         document.getElementById('modal-frase').classList.add('hidden'); 
         carregarFrases(); 
         Swal.fire('Salvo!', '', 'success'); 
-    } catch(e) { Swal.fire('Erro', 'Falha ao salvar', 'error'); } 
+    } catch(e) { 
+        console.error(e);
+        Swal.fire('Erro', 'Falha ao salvar', 'error'); 
+    } 
 }
 
 async function deletarFraseBiblioteca(id) {
-    if((await Swal.fire({title:'Excluir?', text: "Sem volta.", icon: 'warning', showCancelButton:true, confirmButtonColor:'#d33', confirmButtonText:'Sim'})).isConfirmed) {
-        await _supabase.from('frases').delete().eq('id', id);
-        registrarLog('EXCLUIR', id);
-        carregarFrases();
-        Swal.fire('Excluído!', '', 'success');
+    const result = await Swal.fire({
+        title:'Excluir?', 
+        text: "Essa ação não pode ser desfeita.", 
+        icon: 'warning', 
+        showCancelButton:true, 
+        confirmButtonColor:'#d33', 
+        confirmButtonText:'Sim, excluir'
+    });
+
+    if(result.isConfirmed) {
+        try {
+            const { error } = await _supabase.from('frases').delete().eq('id', id);
+            if (error) throw error;
+            
+            registrarLog('EXCLUIR', id);
+            carregarFrases();
+            Swal.fire('Excluído!', '', 'success');
+        } catch (e) {
+            console.error(e);
+            Swal.fire('Erro', 'Não foi possível excluir.', 'error');
+        }
     }
 }
