@@ -4,142 +4,77 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gupy Frases - Sistema de Gestão</title>
-    
     <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
     <style>
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; }
-        .nav-item { transition: all 0.2s; border-radius: 0.5rem; }
-        .nav-item:hover { background-color: #334155; color: white; }
         .active-nav { background-color: #2563eb; color: white; }
-        
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-
-        .header-select {
-            background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
-            background-position: right 0.75rem center;
-            background-repeat: no-repeat;
-            background-size: 1em 1em;
-            padding-right: 2rem;
-            -webkit-appearance: none; appearance: none;
-        }
-        
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        .animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
     </style>
 </head>
 <body class="h-screen overflow-hidden text-slate-800 bg-slate-50 flex flex-col">
 
     <div id="login-flow" class="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 absolute z-[100]">
-        <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md animate-fade-in">
-            <div class="text-center mb-8">
-                <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-quote-right text-3xl text-blue-600"></i></div>
-                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">Gupy Frases</h1>
-            </div>
-            <form onsubmit="event.preventDefault(); fazerLogin();">
-                <div class="mb-4"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Usuário</label><input type="text" id="login-user" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
-                <div class="mb-6"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha</label><input type="password" id="login-pass" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition text-lg">Acessar</button>
+        <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md animate-fade-in text-center">
+            <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-quote-right text-3xl text-blue-600"></i></div>
+            <h1 class="text-3xl font-extrabold text-slate-800 mb-8">Gupy Frases</h1>
+            <form onsubmit="event.preventDefault(); fazerLogin();" class="text-left">
+                <div class="mb-4"><label class="text-xs font-bold text-slate-500 uppercase ml-1">Usuário</label><input type="text" id="login-user" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-semibold" required></div>
+                <div class="mb-6"><label class="text-xs font-bold text-slate-500 uppercase ml-1">Senha</label><input type="password" id="login-pass" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-semibold" required></div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition transform active:scale-95">Acessar Sistema</button>
             </form>
         </div>
     </div>
 
     <div id="app-flow" class="hidden flex flex-col h-screen">
-        
         <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
             <div class="container mx-auto px-6 h-full flex items-center justify-between">
                 <div class="flex items-center gap-8">
-                    <div class="flex items-center gap-2 text-white cursor-pointer" onclick="navegar('biblioteca')">
-                        <i class="fas fa-quote-right text-blue-500 text-xl"></i>
-                        <span class="font-extrabold text-xl tracking-tight">Gupy<span class="text-blue-500">Frases</span></span>
-                    </div>
-                    <div class="hidden md:flex items-center gap-2">
-                        <button onclick="navegar('biblioteca')" id="menu-biblioteca" class="nav-item px-4 py-2 text-sm font-bold active-nav"><i class="fas fa-book-open mr-2"></i>Biblioteca</button>
-                        <div id="admin-menu-items" class="hidden flex gap-2 border-l border-slate-700 pl-2 ml-2">
-                            <button onclick="navegar('equipe')" id="menu-equipe" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-users-cog mr-2"></i>Equipe</button>
-                            <button onclick="navegar('logs')" id="menu-logs" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-history mr-2"></i>Logs</button>
-                            <button onclick="navegar('dashboard')" id="menu-dashboard" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-chart-pie mr-2"></i>Dashboard</button>
+                    <div class="text-white font-extrabold text-xl">Gupy<span class="text-blue-500">Frases</span></div>
+                    <div class="hidden md:flex gap-2">
+                        <button onclick="navegar('biblioteca')" id="menu-biblioteca" class="px-4 py-2 text-sm font-bold rounded-lg hover:bg-slate-800 transition">Biblioteca</button>
+                        <div id="admin-menu-items" class="hidden flex gap-2 border-l border-slate-700 pl-2">
+                            <button onclick="navegar('equipe')" class="px-4 py-2 text-sm font-bold rounded-lg hover:bg-slate-800">Equipe</button>
+                            <button onclick="navegar('dashboard')" class="px-4 py-2 text-sm font-bold rounded-lg hover:bg-slate-800">Dashboard</button>
                         </div>
                     </div>
                 </div>
-
                 <div class="flex items-center gap-4">
-                    <div id="global-actions" class="flex gap-2">
-                        <button id="btn-add-global" onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2"><i class="fas fa-plus"></i> Nova Frase</button>
-                    </div>
-                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition ml-2"><i class="fas fa-sign-out-alt"></i></button>
+                    <span id="user-name-display" class="text-sm font-bold text-white"></span>
+                    <button id="btn-add-global" onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2"><i class="fas fa-plus"></i> Nova Frase</button>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition"><i class="fas fa-sign-out-alt"></i></button>
                 </div>
             </div>
         </nav>
 
-        <header class="bg-white border-b border-gray-200 py-4 z-40 relative">
-            <div class="container mx-auto px-6 flex flex-col lg:flex-row gap-4 items-center">
-                <div class="relative flex-1 group flex gap-2 w-full">
-                    <input type="text" id="global-search" oninput="debounceBusca()" placeholder="🔎 Pesquisar..." class="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white outline-none transition-all">
-                    <i class="fas fa-search absolute left-4 top-3.5 text-slate-400"></i>
-                    <button id="btn-toggle-filters" onclick="toggleFiltros()" class="bg-slate-50 border border-slate-200 text-slate-600 px-4 rounded-xl font-bold text-sm"><i class="fas fa-filter"></i></button>
-                </div>
-            </div>
-
-            <div id="filter-panel" class="hidden absolute top-full left-0 w-full bg-white border-b border-gray-200 shadow-lg z-30">
-                <div class="container mx-auto px-6 py-4 flex flex-wrap gap-4">
-                    <select id="filtro-empresa" onchange="aplicarFiltros()" class="header-select py-2 px-3 rounded-lg border bg-slate-50 text-sm font-bold"><option value="">🏢 Empresa</option></select>
-                    <select id="filtro-motivo" onchange="aplicarFiltros()" class="header-select py-2 px-3 rounded-lg border bg-slate-50 text-sm font-bold"><option value="">🎯 Motivo</option></select>
-                    <select id="filtro-doc" onchange="aplicarFiltros()" class="header-select py-2 px-3 rounded-lg border bg-slate-50 text-sm font-bold"><option value="">📄 Documento</option></select>
-                    <button onclick="limparFiltros()" class="text-xs font-bold text-red-500">Limpar</button>
-                </div>
-            </div>
-        </header>
-
         <main class="flex-1 overflow-y-auto p-6">
-            <div class="container mx-auto max-w-7xl">
-                <section id="view-biblioteca" class="view-section">
-                    <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20"></div>
-                </section>
-                
-                <section id="view-equipe" class="view-section hidden">
-                    </section>
-
-                <section id="view-dashboard" class="view-section hidden">
-                    </section>
-
-                <section id="view-logs" class="view-section hidden">
-                    <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"></div>
-                </section>
-            </div>
+            <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 max-w-7xl mx-auto pb-20"></div>
         </main>
     </div>
 
     <div id="modal-frase" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in">
             <div class="bg-gray-50 px-8 py-5 border-b flex justify-between items-center">
                 <h3 id="modal-title" class="text-xl font-extrabold text-gray-800">Nova Frase</h3>
-                <button onclick="fecharModalFrase()" class="text-gray-400 hover:text-red-500"><i class="fas fa-times"></i></button>
+                <button onclick="fecharModalFrase()" class="text-gray-400 hover:text-red-500 transition text-xl"><i class="fas fa-times"></i></button>
             </div>
             <div class="p-8">
                 <input type="hidden" id="id-frase">
-                <div class="grid grid-cols-3 gap-4 mb-6">
-                    <input id="inp-empresa" type="text" list="list-empresas" placeholder="Empresa" class="p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500">
-                    <input id="inp-motivo" type="text" list="list-motivos" placeholder="Motivo" class="p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500">
-                    <input id="inp-doc" type="text" list="list-docs" placeholder="Documento" class="p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div><label class="text-[10px] font-bold text-slate-400 uppercase">Empresa</label><input id="inp-empresa" type="text" list="list-empresas" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500"></div>
+                    <div><label class="text-[10px] font-bold text-slate-400 uppercase">Motivo</label><input id="inp-motivo" type="text" list="list-motivos" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500"></div>
+                    <div><label class="text-[10px] font-bold text-slate-400 uppercase">Documento</label><input id="inp-doc" type="text" list="list-docs" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500"></div>
                 </div>
-                <textarea id="inp-conteudo" rows="6" placeholder="Conteúdo..." class="w-full p-4 border rounded-xl text-lg bg-gray-50 outline-none focus:border-blue-500"></textarea>
+                <div><label class="text-[10px] font-bold text-slate-400 uppercase">Conteúdo</label><textarea id="inp-conteudo" rows="6" class="w-full p-4 border rounded-xl text-lg bg-gray-50 outline-none focus:border-blue-500"></textarea></div>
             </div>
             <div class="bg-gray-50 px-8 py-5 border-t flex justify-end gap-3">
-                <button onclick="fecharModalFrase()" class="px-6 py-2 font-bold text-gray-500">Cancelar</button>
-                <button onclick="salvarFrase()" class="bg-blue-600 text-white px-8 py-2 rounded-xl font-bold shadow-lg">Salvar Frase</button>
+                <button onclick="fecharModalFrase()" class="px-6 py-2 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition">Cancelar</button>
+                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-xl font-bold shadow-lg shadow-blue-200 transition transform active:scale-95">Salvar Frase</button>
             </div>
         </div>
         <datalist id="list-empresas"></datalist><datalist id="list-motivos"></datalist><datalist id="list-docs"></datalist>
