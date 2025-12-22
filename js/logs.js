@@ -1,35 +1,39 @@
 // Local: js/logs.js
 
 let logsSubscription = null;
-let listaLogsAtual = []; // Essencial para o modal funcionar
+let listaLogsAtual = []; // Cache dos logs iniciais (timeline padrão)
 
 async function carregarLogs() {
     const container = document.getElementById('container-logs-agrupados');
     if(!container) return;
     
+    // Se estiver vazio, mostra loading
     if(container.innerHTML === '') {
         container.innerHTML = '<div class="col-span-full py-12 text-center text-slate-400 animate-pulse flex flex-col items-center gap-2"><i class="fas fa-satellite-dish fa-2x"></i><span class="text-xs font-bold uppercase tracking-widest">Sincronizando timeline...</span></div>';
     }
 
     try {
+        // CORREÇÃO 1: Aumentado o limite para 500 para trazer mais histórico inicial
         const { data: logs, error } = await _supabase
             .from('view_logs_detalhados') 
             .select('*')
             .order('data_hora', { ascending: false })
-            .limit(100);
+            .limit(500);
 
         if (error) {
             if(error.code === '42P01') throw new Error("VIEW_MISSING");
             throw error;
         }
 
-        listaLogsAtual = logs; // Salva para uso no Modal
-        renderizarLogs(logs);
+        listaLogsAtual = logs || []; // Salva na memória para quando limpar a busca
+        renderizarLogs(listaLogsAtual);
 
+        // Realtime (apenas para novos logs enquanto assiste)
         if (!logsSubscription) {
             logsSubscription = _supabase.channel('logs-realtime')
                 .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' }, () => {
-                    carregarLogs();
+                    // Atualiza silenciosamente para não quebrar a busca do usuário
+                    atualizarLogsEmTempoReal();
                 })
                 .subscribe();
         }
@@ -44,11 +48,66 @@ async function carregarLogs() {
     }
 }
 
+// Função auxiliar para atualizar sem piscar a tela
+async function atualizarLogsEmTempoReal() {
+    const inputBusca = document.getElementById('global-search');
+    // Só atualiza automático se o usuário NÃO estiver pesquisando
+    if (inputBusca && inputBusca.value.trim() !== '') return;
+
+    const { data } = await _supabase
+        .from('view_logs_detalhados') 
+        .select('*')
+        .order('data_hora', { ascending: false })
+        .limit(500);
+    
+    if (data) {
+        listaLogsAtual = data;
+        renderizarLogs(data);
+    }
+}
+
+// CORREÇÃO 2: Busca Real no Banco de Dados
+async function filtrarLogs(termo) {
+    const container = document.getElementById('container-logs-agrupados');
+    
+    // Se limpou a busca, restaura a lista inicial (cache)
+    if (!termo || termo.trim() === '') {
+        renderizarLogs(listaLogsAtual);
+        return;
+    }
+
+    // Feedback visual de busca
+    container.innerHTML = '<div class="col-span-full py-10 text-center text-blue-500 flex flex-col items-center gap-2 animate-pulse"><i class="fas fa-search fa-spin text-2xl"></i><span class="text-xs font-bold uppercase">Buscando em todo o histórico...</span></div>';
+
+    try {
+        // Busca no Supabase usando ILIKE (case insensitive)
+        // Pesquisa no nome do usuário, na ação ou no detalhe
+        const { data, error } = await _supabase
+            .from('view_logs_detalhados') 
+            .select('*')
+            .or(`nome_real.ilike.%${termo}%,username.ilike.%${termo}%,acao.ilike.%${termo}%,detalhe.ilike.%${termo}%`)
+            .order('data_hora', { ascending: false })
+            .limit(100); // Traz os 100 resultados mais relevantes da busca
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            container.innerHTML = `<div class="col-span-full text-center text-slate-400 py-10"><i class="far fa-sad-tear text-2xl mb-2"></i><p>Nada encontrado para "${termo}"</p></div>`;
+        } else {
+            renderizarLogs(data);
+        }
+
+    } catch (e) {
+        console.error("Erro na busca:", e);
+        container.innerHTML = '<div class="col-span-full text-center text-red-400 text-sm">Erro ao buscar no histórico.</div>';
+    }
+}
+
 function renderizarLogs(lista) {
     const container = document.getElementById('container-logs-agrupados');
     
     if(!lista || !lista.length) { 
-        container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 flex flex-col items-center"><i class="far fa-clock text-4xl mb-3 text-slate-200"></i><p class="text-sm">Sem registros recentes.</p></div>'; 
+        container.innerHTML = '<div class="col-span-full text-center text-slate-400 py-10 flex flex-col items-center"><i class="far fa-clock text-4xl mb-3 text-slate-200"></i><p class="text-sm">Sem registros.</p></div>'; 
         return; 
     }
     
@@ -107,8 +166,12 @@ function criarCardLog(log) {
         else resumoDetalhe = log.detalhe.length > 25 ? log.detalhe.substring(0, 25) + '...' : log.detalhe;
     }
 
+    // Correção: Passamos o log inteiro no onclick para não depender do índice do array (que muda na busca)
+    // Precisamos escapar as aspas para não quebrar o HTML
+    const logSafe = JSON.stringify(log).replace(/"/g, '&quot;');
+
     return `
-    <div onclick="abrirModalLog(${log.indexOriginal})" 
+    <div onclick='abrirModalLogDireto(${logSafe})' 
          class="group bg-white p-4 rounded-2xl border border-slate-100 shadow-sm hover:shadow-lg hover:-translate-y-1 hover:border-${cfg.cor}-200 transition-all duration-300 cursor-pointer relative overflow-hidden">
         <div class="absolute left-0 top-0 bottom-0 w-1.5 bg-${cfg.cor}-500"></div>
         <div class="flex justify-between items-start mb-3 pl-3">
@@ -128,13 +191,12 @@ function criarCardLog(log) {
                 ${resumoDetalhe}
             </p>
         </div>
-        <span class="hidden">${log.detalhe} ${log.username} ${log.acao}</span>
     </div>
     `;
 }
 
-function abrirModalLog(index) {
-    const log = listaLogsAtual[index];
+// Nova função para abrir modal recebendo o objeto direto (funciona melhor com busca)
+function abrirModalLogDireto(log) {
     if(!log) return;
 
     const dataObj = new Date(log.data_hora);
@@ -172,12 +234,4 @@ function abrirModalLog(index) {
     
     document.getElementById('modal-log-desc').innerText = textoDetalhe || 'Sem detalhes adicionais.';
     document.getElementById('modal-log-detalhe').classList.remove('hidden');
-}
-
-function filtrarLogs(termo) {
-    const cards = document.querySelectorAll('#container-logs-agrupados .group');
-    cards.forEach(card => {
-        if(card.innerText.toLowerCase().includes(termo)) card.classList.remove('hidden');
-        else card.classList.add('hidden');
-    });
 }
