@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gupy Frases - Sistema de Gestão</title>
+    <title>Gupy Frases - Sistema Completo</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -11,67 +11,52 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; }
-        .nav-item { transition: all 0.2s; border-radius: 0.5rem; }
+        .nav-item { transition: all 0.2s; border-radius: 0.5rem; color: #94a3b8; }
+        .nav-item:hover { background-color: #1e293b; color: white; }
         .active-nav { background-color: #2563eb !important; color: white !important; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
     </style>
 </head>
 <body class="h-screen overflow-hidden text-slate-800 bg-slate-50 flex flex-col">
 
-    <div id="login-flow" class="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 absolute z-[100]">
+    <div id="login-flow" class="flex h-screen w-full items-center justify-center bg-slate-900 absolute z-[100]">
         <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md animate-fade-in">
             <div class="text-center mb-8">
-                <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i class="fas fa-quote-right text-3xl text-blue-600"></i>
-                </div>
-                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">Gupy Frases</h1>
+                <h1 class="text-3xl font-extrabold text-slate-800">Gupy Frases</h1>
             </div>
             <form onsubmit="event.preventDefault(); fazerLogin();">
-                <div class="mb-4">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Usuário</label>
-                    <input type="text" id="login-user" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required>
-                </div>
-                <div class="mb-6">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha</label>
-                    <input type="password" id="login-pass" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required>
-                </div>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transition text-lg">Acessar</button>
+                <div class="mb-4"><input type="text" id="login-user" placeholder="Usuário" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <div class="mb-6"><input type="password" id="login-pass" placeholder="Senha" class="w-full p-3 border rounded-xl outline-none focus:ring-2 focus:ring-blue-500"></div>
+                <button type="submit" class="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl transition shadow-lg">Entrar</button>
             </form>
         </div>
     </div>
 
     <div id="app-flow" class="hidden flex flex-col h-screen">
-        <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
-            <div class="container mx-auto px-6 h-full flex items-center justify-between">
-                <div class="flex items-center gap-8">
-                    <div class="flex items-center gap-2 text-white font-extrabold text-xl">
-                        Gupy<span class="text-blue-500">Frases</span>
-                    </div>
-                    <div class="hidden md:flex items-center gap-2">
-                        <button onclick="navegar('biblioteca')" id="menu-biblioteca" class="nav-item px-4 py-2 text-sm font-bold active-nav"><i class="fas fa-book-open mr-2"></i>Biblioteca</button>
-                        <div id="admin-menu-items" class="hidden flex gap-2 border-l border-slate-700 pl-2 ml-2">
-                            <button onclick="navegar('equipe')" id="menu-equipe" class="nav-item px-4 py-2 text-sm font-bold hover:bg-slate-800 transition">Equipe</button>
-                            <button onclick="navegar('dashboard')" id="menu-dashboard" class="nav-item px-4 py-2 text-sm font-bold hover:bg-slate-800 transition">Dashboard</button>
-                        </div>
+        <nav class="bg-slate-900 h-16 flex-shrink-0 flex items-center justify-between px-6 z-50">
+            <div class="flex items-center gap-8">
+                <span class="text-white font-extrabold text-xl">Gupy<span class="text-blue-500">Frases</span></span>
+                <div class="flex gap-2">
+                    <button onclick="navegar('biblioteca')" id="menu-biblioteca" class="nav-item px-4 py-2 text-sm font-bold active-nav">Biblioteca</button>
+                    <div id="admin-menu-items" class="hidden flex gap-2 border-l border-slate-700 pl-2">
+                        <button onclick="navegar('equipe')" id="menu-equipe" class="nav-item px-4 py-2 text-sm font-bold">Equipe</button>
+                        <button onclick="navegar('logs')" id="menu-logs" class="nav-item px-4 py-2 text-sm font-bold">Logs</button>
+                        <button onclick="navegar('dashboard')" id="menu-dashboard" class="nav-item px-4 py-2 text-sm font-bold">Dashboard</button>
                     </div>
                 </div>
-                <div class="flex items-center gap-4">
-                    <span id="user-name-display" class="text-sm font-bold text-white"></span>
-                    <button onclick="abrirModalFrase()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg shadow-blue-900/20">
-                        <i class="fas fa-plus"></i> Nova Frase
-                    </button>
-                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition ml-2"><i class="fas fa-sign-out-alt"></i></button>
-                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <span id="user-name-display" class="text-sm font-bold text-white"></span>
+                <button onclick="abrirModalFrase()" class="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-lg">+ Nova Frase</button>
+                <button onclick="logout()" class="text-slate-400 hover:text-red-400"><i class="fas fa-sign-out-alt"></i></button>
             </div>
         </nav>
 
-        <header class="bg-white border-b border-gray-200 py-4 z-40">
-            <div class="container mx-auto px-6">
-                <div class="relative w-full max-w-2xl mx-auto">
-                    <input type="text" id="global-search" oninput="aplicarFiltros()" placeholder="Pesquisar frases..." class="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all">
+        <header class="bg-white border-b py-4">
+            <div class="container mx-auto px-6 max-w-2xl">
+                <div class="relative">
+                    <input type="text" id="global-search" oninput="aplicarFiltros()" placeholder="Pesquisar..." class="w-full pl-12 pr-4 py-3 rounded-xl bg-slate-50 border outline-none focus:bg-white transition-all">
                     <i class="fas fa-search absolute left-4 top-3.5 text-slate-400"></i>
                 </div>
             </div>
@@ -82,71 +67,70 @@
                 <section id="view-biblioteca" class="view-section">
                     <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 gap-6 pb-20"></div>
                 </section>
+                
                 <section id="view-equipe" class="view-section hidden">
                     <div id="container-equipe"></div>
                 </section>
+
+                <section id="view-logs" class="view-section hidden">
+                    <div class="bg-white rounded-2xl shadow-sm border overflow-hidden">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50 text-xs font-bold text-slate-500 uppercase">
+                                <tr><th class="px-6 py-4">Data/Hora</th><th class="px-6 py-4">Usuário</th><th class="px-6 py-4">Ação</th><th class="px-6 py-4">Detalhe</th></tr>
+                            </thead>
+                            <tbody id="lista-logs" class="text-sm"></tbody>
+                        </table>
+                    </div>
+                </section>
+
                 <section id="view-dashboard" class="view-section hidden">
                     <div id="container-dashboard"></div>
                 </section>
             </div>
         </main>
 
-        <button onclick="toggleChat()" id="chat-toggle-btn" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition z-[60]">
-            <i class="fas fa-comments text-xl"></i>
-            <span id="badge-unread" class="hidden absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full border-2 border-white"></span>
-        </button>
-
-        <div id="chat-window" class="hidden fixed bottom-24 right-6 w-80 h-96 bg-white rounded-2xl shadow-2xl border flex flex-col z-[60] overflow-hidden">
-            <div class="bg-blue-600 p-4 text-white font-bold flex justify-between items-center">
-                <span>Chat da Equipe</span>
+        <div id="chat-window" class="hidden fixed bottom-24 right-6 w-80 h-96 bg-white rounded-2xl shadow-2xl border flex flex-col z-[60]">
+            <div class="bg-blue-600 p-4 text-white font-bold rounded-t-2xl flex justify-between">
+                <span>Chat Equipe</span>
                 <button onclick="toggleChat()"><i class="fas fa-times"></i></button>
             </div>
             <div id="chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50"></div>
             <div class="p-3 border-t flex gap-2">
-                <input type="text" id="chat-input" placeholder="Mensagem..." class="flex-1 border rounded-lg px-3 py-2 text-sm outline-none focus:border-blue-500">
-                <button onclick="enviarMensagem()" class="text-blue-600 p-2"><i class="fas fa-paper-plane"></i></button>
+                <input type="text" id="chat-input" class="flex-1 border rounded-lg px-2 py-1 text-sm outline-none">
+                <button onclick="enviarMensagem()" class="text-blue-600"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
+        <button onclick="toggleChat()" class="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 transition z-[60]">
+            <i class="fas fa-comments text-xl"></i>
+        </button>
     </div>
 
-    <div id="modal-frase" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in">
+    <div id="modal-frase" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl w-full max-w-2xl overflow-hidden animate-fade-in">
             <div class="bg-gray-50 px-8 py-5 border-b flex justify-between items-center">
-                <h3 id="modal-title" class="text-xl font-extrabold text-gray-800 tracking-tight">Nova Frase</h3>
-                <button onclick="fecharModalFrase()" class="text-gray-400 hover:text-red-500 transition text-xl"><i class="fas fa-times"></i></button>
+                <h3 id="modal-title" class="text-xl font-extrabold">Nova Frase</h3>
+                <button onclick="fecharModalFrase()" class="text-gray-400 hover:text-red-500"><i class="fas fa-times"></i></button>
             </div>
-            <div class="p-8">
+            <div class="p-8 space-y-6">
                 <input type="hidden" id="id-frase">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                    <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Empresa</label>
-                        <input id="inp-empresa" type="text" list="list-empresas" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 font-semibold transition-all">
-                    </div>
-                    <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Motivo</label>
-                        <input id="inp-motivo" type="text" list="list-motivos" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 font-semibold transition-all">
-                    </div>
-                    <div>
-                        <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Documento</label>
-                        <input id="inp-doc" type="text" list="list-docs" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 font-semibold transition-all">
-                    </div>
+                <div class="grid grid-cols-3 gap-4">
+                    <input id="inp-empresa" placeholder="Empresa" class="p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500">
+                    <input id="inp-motivo" placeholder="Motivo" class="p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500">
+                    <input id="inp-doc" placeholder="Documento" class="p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500">
                 </div>
-                <div>
-                    <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Conteúdo da Frase</label>
-                    <textarea id="inp-conteudo" rows="6" class="w-full p-4 border rounded-xl text-lg bg-gray-50 outline-none focus:border-blue-500 font-medium transition-all" placeholder="Digite aqui o texto que será copiado..."></textarea>
-                </div>
+                <textarea id="inp-conteudo" rows="6" class="w-full p-4 border rounded-xl bg-gray-50 outline-none focus:border-blue-500" placeholder="Conteúdo da frase..."></textarea>
             </div>
             <div class="bg-gray-50 px-8 py-5 border-t flex justify-end gap-3">
-                <button onclick="fecharModalFrase()" class="px-6 py-2 font-bold text-gray-500 hover:bg-gray-200 rounded-xl transition">Cancelar</button>
-                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-xl font-bold shadow-lg shadow-blue-200 transition transform active:scale-95">Salvar Frase</button>
+                <button onclick="fecharModalFrase()" class="px-6 py-2 font-bold text-gray-500">Cancelar</button>
+                <button onclick="salvarFrase()" class="bg-blue-600 text-white px-8 py-2 rounded-xl font-bold shadow-lg shadow-blue-200">Salvar Frase</button>
             </div>
         </div>
-        <datalist id="list-empresas"></datalist><datalist id="list-motivos"></datalist><datalist id="list-docs"></datalist>
     </div>
 
     <script src="js/app.js"></script>
     <script src="js/biblioteca.js"></script>
     <script src="js/dashboard.js"></script>
     <script src="js/equipe.js"></script>
+    <script src="js/logs.js"></script>
 </body>
 </html>
