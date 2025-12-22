@@ -1,0 +1,38 @@
+/* css/style.css */
+
+/* Fonte e Fundo */
+body { font-family: 'Nunito', sans-serif; background-color: #f8fafc; }
+
+/* Navegação */
+.nav-item { transition: all 0.2s; border-radius: 0.5rem; }
+.nav-item:hover { background-color: #334155; color: white; }
+.active-nav { background-color: #2563eb; color: white; }
+
+/* Scrollbars Personalizadas */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+/* Inputs e Selects Especiais */
+.header-select {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+    background-size: 1em 1em;
+    padding-right: 2rem;
+    -webkit-appearance: none; appearance: none;
+}
+
+/* Animações */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+.animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+
+/* Chat Widget */
+.chat-widget { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); transform-origin: bottom right; }
+.chat-open { transform: scale(1); opacity: 1; pointer-events: auto; }
+.chat-closed { transform: scale(0.9); opacity: 0; pointer-events: none; display: none; }
