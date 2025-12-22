@@ -335,6 +335,17 @@
                 </section>
 
                 <section id="view-logs" class="view-section hidden flex-grow space-y-6">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+                        <div class="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+                            <button onclick="filtrarPorCategoriaLog('TODOS')" class="btn-filtro-log active-log-filter px-4 py-2 rounded-lg text-xs font-bold bg-slate-800 text-white transition whitespace-nowrap" data-cat="TODOS">Todos</button>
+                            <button onclick="filtrarPorCategoriaLog('CRIAR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-purple-100 hover:text-purple-600 transition whitespace-nowrap" data-cat="CRIAR">Criação</button>
+                            <button onclick="filtrarPorCategoriaLog('COPIAR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-600 transition whitespace-nowrap" data-cat="COPIAR">Cópias</button>
+                            <button onclick="filtrarPorCategoriaLog('EDITAR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-amber-100 hover:text-amber-600 transition whitespace-nowrap" data-cat="EDITAR">Edição</button>
+                            <button onclick="filtrarPorCategoriaLog('EXCLUIR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-600 transition whitespace-nowrap" data-cat="EXCLUIR">Exclusão</button>
+                            <button onclick="filtrarPorCategoriaLog('LOGIN')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-600 transition whitespace-nowrap" data-cat="LOGIN">Acessos</button>
+                        </div>
+                    </div>
+
                     <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
                 </section>
 
