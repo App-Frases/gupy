@@ -1,4 +1,4 @@
-// js/app.js
+// Local: js/app.js
 
 let usuarioLogado = null;
 let abaAtiva = 'biblioteca';
@@ -39,7 +39,10 @@ async function fazerLogin() {
             const usuario = data[0];
             if (usuario.ativo === false) return Swal.fire('Bloqueado', 'Conta inativada.', 'error');
             usuarioLogado = usuario; 
-            localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
+            localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado));
+            
+            // --- NOVO: Marca o login de hoje para não duplicar na cópia ---
+            localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]); 
             
             if(usuarioLogado.primeiro_acesso) {
                 document.getElementById('login-flow').classList.add('hidden');
@@ -93,12 +96,15 @@ async function atualizarSenhaPrimeiroAcesso() {
     localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
     document.getElementById('first-access-modal').classList.add('hidden'); 
     
+    // Marca hoje também
+    localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]);
     registrarLog('LOGIN', 'Ativou conta e acessou');
     entrarNoSistema();
 }
 
 function logout() { 
     localStorage.removeItem('gupy_session'); 
+    localStorage.removeItem('gupy_ultimo_login_diario'); // Limpa ao sair
     location.reload(); 
 }
 
@@ -178,7 +184,7 @@ function iniciarChat() { _supabase.from('chat_mensagens').select('*').order('cre
 async function enviarMensagem() { const i = document.getElementById('chat-input'); if(i.value.trim()){ await _supabase.from('chat_mensagens').insert([{usuario:usuarioLogado.username, mensagem:i.value.trim(), perfil:usuarioLogado.perfil}]); i.value=''; } }
 function addMsg(msg, isHistory) { const c = document.getElementById('chat-messages'); const me = msg.usuario === usuarioLogado.username; const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario; c.innerHTML += `<div class="flex flex-col ${me?'items-end':'items-start'} mb-2"><span class="text-[9px] text-gray-400 font-bold ml-1">${me?'':nomeMostrar}</span><div class="px-3 py-2 rounded-xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm">${msg.mensagem}</div></div>`; c.scrollTop = c.scrollHeight; if (!isHistory && !chatAberto && !me) { const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-blue-600'); btn.classList.add('bg-orange-500', 'animate-bounce'); document.getElementById('badge-unread').classList.remove('hidden'); } }
 
-// Funções Header (CEP/Data) movidas para cá pois são globais do layout
+// Funções Header (CEP/Data)
 function calcularIdadeHeader() {
     const val = document.getElementById('quick-idade').value;
     if(val.length === 10) { 
