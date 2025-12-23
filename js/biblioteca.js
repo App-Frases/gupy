@@ -59,6 +59,17 @@ async function copiarTexto(id) {
     const f = cacheFrases.find(i => i.id == id); 
     if(!f) return;
 
+    // --- NOVA LÓGICA: Login Diário Automático ---
+    // Verifica se já registramos um login HOJE. Se não, registra agora.
+    const hoje = new Date().toISOString().split('T')[0]; // Ex: "2023-10-27"
+    const ultimoRegistro = localStorage.getItem('gupy_ultimo_login_diario');
+
+    if (ultimoRegistro !== hoje) {
+        await registrarLog('LOGIN', 'Acesso Diário (Via Cópia)');
+        localStorage.setItem('gupy_ultimo_login_diario', hoje);
+    }
+    // ---------------------------------------------
+
     navigator.clipboard.writeText(f.conteudo).then(async () => { 
         const Toast = Swal.mixin({toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true});
         Toast.fire({icon: 'success', title: 'Copiado!'});
@@ -131,8 +142,6 @@ function renderizarBiblioteca(lista, isTop4) {
     
     const cards = lista.map(f => {
         const idSafe = f.id;
-        // CORREÇÃO: Não passamos mais o objeto JSON no HTML, passamos apenas o ID.
-        // Isso evita erros de sintaxe quando a frase tem aspas ou caracteres especiais.
         
         let textoContador;
         let iconeContador;
@@ -191,14 +200,6 @@ function atualizarSugestoesModal() {
     preencher('list-docs', 'documento');
 }
 
-// --- CORREÇÃO: Função que estava faltando ---
-function padronizarFraseInteligente(texto) {
-    if (!texto) return "";
-    // Remove espaços extras e garante que a primeira letra seja maiúscula
-    const t = texto.trim().replace(/\s+/g, ' ');
-    return t.charAt(0).toUpperCase() + t.slice(1);
-}
-
 // --- CRUD ---
 function abrirModalFrase() { 
     document.getElementById('id-frase').value=''; 
@@ -211,9 +212,7 @@ function abrirModalFrase() {
     document.getElementById('modal-frase').classList.remove('hidden'); 
 }
 
-// CORREÇÃO: Função renomeada para prepararEdicao e busca pelo ID
 function prepararEdicao(id) { 
-    // Busca a frase no cache usando o ID
     const f = cacheFrases.find(item => item.id == id);
     if (!f) return Swal.fire('Erro', 'Frase não encontrada.', 'error');
 
@@ -238,7 +237,7 @@ async function salvarFrase() {
         return Swal.fire({title: 'Campos Obrigatórios', text: 'Por favor, preencha todos os campos.', icon: 'warning', confirmButtonColor: '#3b82f6'});
     }
     
-    // Agora a função existe e vai funcionar
+    // Função global definida no utils.js
     const conteudoLimpo = padronizarFraseInteligente(rawConteudo);
     const inputPuro = normalizar(conteudoLimpo).replace(/[^\w]/g, '');
     
