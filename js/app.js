@@ -41,7 +41,7 @@ async function fazerLogin() {
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado));
             
-            // --- NOVO: Marca o login de hoje para não duplicar na cópia ---
+            // Marca o login de hoje para não duplicar log na cópia
             localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]); 
             
             if(usuarioLogado.primeiro_acesso) {
@@ -96,7 +96,6 @@ async function atualizarSenhaPrimeiroAcesso() {
     localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
     document.getElementById('first-access-modal').classList.add('hidden'); 
     
-    // Marca hoje também
     localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]);
     registrarLog('LOGIN', 'Ativou conta e acessou');
     entrarNoSistema();
@@ -104,7 +103,7 @@ async function atualizarSenhaPrimeiroAcesso() {
 
 function logout() { 
     localStorage.removeItem('gupy_session'); 
-    localStorage.removeItem('gupy_ultimo_login_diario'); // Limpa ao sair
+    localStorage.removeItem('gupy_ultimo_login_diario'); 
     location.reload(); 
 }
 
@@ -154,7 +153,7 @@ function navegar(pagina) {
     const inputBusca = document.getElementById('global-search');
     if(inputBusca) { 
         inputBusca.value = ''; 
-        document.getElementById('btn-clear-search').classList.add('hidden'); // Esconde o X ao navegar
+        document.getElementById('btn-clear-search').classList.add('hidden');
         inputBusca.disabled = (pagina === 'dashboard'); 
         if(pagina === 'biblioteca') inputBusca.placeholder = "🔎 Pesquisar frases...";
         else if(pagina === 'equipe') inputBusca.placeholder = "🔎 Buscar membro...";
@@ -163,10 +162,8 @@ function navegar(pagina) {
     }
 }
 
-// --- ATUALIZADO: Controle da Busca Global e Botão Limpar ---
-
 function debounceBusca() { 
-    // 1. Controle Visual do Botão "X" (Imediato)
+    // Controle Visual do Botão "X"
     const input = document.getElementById('global-search');
     const btnLimpar = document.getElementById('btn-clear-search');
     
@@ -176,7 +173,6 @@ function debounceBusca() {
         btnLimpar.classList.add('hidden');
     }
 
-    // 2. Execução da Busca (Com delay para performance)
     clearTimeout(debounceTimer); 
     debounceTimer = setTimeout(() => {
         const termo = input.value.toLowerCase();
@@ -191,12 +187,11 @@ function limparBuscaGlobal() {
     input.value = '';
     document.getElementById('btn-clear-search').classList.add('hidden');
     
-    // Dispara a limpeza imediatamente (sem delay)
     if (abaAtiva === 'biblioteca' && typeof aplicarFiltros === 'function') aplicarFiltros();
     if (abaAtiva === 'equipe' && typeof filtrarEquipe === 'function') filtrarEquipe('');
     if (abaAtiva === 'logs' && typeof filtrarLogs === 'function') filtrarLogs('');
     
-    input.focus(); // Devolve o foco para o input
+    input.focus(); 
 }
 
 // --- Funções de Chat e Header ---
@@ -210,62 +205,3 @@ function toggleChat() { const w = document.getElementById('chat-window'); chatAb
 function iniciarChat() { _supabase.from('chat_mensagens').select('*').order('created_at',{ascending:true}).limit(50).then(({data})=>{if(data)data.forEach(m => addMsg(m, true))}); _supabase.channel('chat').on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensagens'},p=>addMsg(p.new, false)).subscribe(); }
 async function enviarMensagem() { const i = document.getElementById('chat-input'); if(i.value.trim()){ await _supabase.from('chat_mensagens').insert([{usuario:usuarioLogado.username, mensagem:i.value.trim(), perfil:usuarioLogado.perfil}]); i.value=''; } }
 function addMsg(msg, isHistory) { const c = document.getElementById('chat-messages'); const me = msg.usuario === usuarioLogado.username; const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario; c.innerHTML += `<div class="flex flex-col ${me?'items-end':'items-start'} mb-2"><span class="text-[9px] text-gray-400 font-bold ml-1">${me?'':nomeMostrar}</span><div class="px-3 py-2 rounded-xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm">${msg.mensagem}</div></div>`; c.scrollTop = c.scrollHeight; if (!isHistory && !chatAberto && !me) { const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-blue-600'); btn.classList.add('bg-orange-500', 'animate-bounce'); document.getElementById('badge-unread').classList.remove('hidden'); } }
-
-// Funções Header (CEP/Data)
-function calcularIdadeHeader() {
-    const val = document.getElementById('quick-idade').value;
-    if(val.length === 10) { 
-        document.getElementById('nasc-input').value = val; 
-        calcularDatas(); 
-        document.getElementById('quick-idade').value = ''; 
-        document.getElementById('modal-idade').classList.remove('hidden'); 
-    }
-}
-function buscarCEPHeader() {
-    const val = document.getElementById('quick-cep').value;
-    if(val.length >= 8) { document.getElementById('cep-input').value = val; buscarCEP(); document.getElementById('quick-cep').value = ''; document.getElementById('modal-cep').classList.remove('hidden'); }
-}
-async function buscarCEP() {
-    const cep = document.getElementById('cep-input').value.replace(/\D/g, ''); 
-    const resArea = document.getElementById('cep-resultado'); 
-    const loading = document.getElementById('cep-loading');
-    if(cep.length !== 8) return Swal.fire('Atenção', 'Digite um CEP válido', 'warning');
-    resArea.classList.add('hidden'); loading.classList.remove('hidden');
-    try { 
-        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); 
-        const data = await res.json(); 
-        loading.classList.add('hidden');
-        if(data.erro) return Swal.fire('Não Encontrado', 'CEP não existe', 'info');
-        document.getElementById('cep-logradouro').innerText = data.logradouro || '---'; 
-        document.getElementById('cep-bairro').innerText = data.bairro || '---'; 
-        document.getElementById('cep-localidade').innerText = `${data.localidade}-${data.uf}`;
-        document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
-        resArea.classList.remove('hidden');
-    } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na conexão', 'error'); }
-}
-function calcularDatas() {
-    const val = document.getElementById('nasc-input').value;
-    if(val.length !== 10) return Swal.fire('Data incompleta', 'Formato DD/MM/AAAA', 'warning');
-    const parts = val.split('/'); 
-    const dNasc = new Date(parts[2], parts[1]-1, parts[0]);
-    const hoje = new Date(); 
-    dNasc.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
-    if (isNaN(dNasc.getTime())) return Swal.fire('Erro', 'Data inválida', 'error');
-    if (dNasc > hoje) return Swal.fire('Erro', 'A data não pode ser futura', 'warning');
-    const diffTime = Math.abs(hoje - dNasc);
-    const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-    let anos = hoje.getFullYear() - dNasc.getFullYear();
-    let meses = hoje.getMonth() - dNasc.getMonth();
-    let diasRestantes = hoje.getDate() - dNasc.getDate();
-    if (diasRestantes < 0) { meses--; diasRestantes += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate(); }
-    if (meses < 0) { anos--; meses += 12; }
-    const semanas = Math.floor(diasRestantes / 7);
-    const diasFinais = diasRestantes % 7;
-    document.getElementById('data-nasc-display').innerText = val;
-    document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
-    document.getElementById('res-anos').innerText = anos;
-    document.getElementById('res-meses').innerText = meses;
-    document.getElementById('res-semanas').innerText = semanas;
-    document.getElementById('res-dias').innerText = diasFinais;
-    document.getElementById('idade-resultado-box').classList.remove('hidden');
-}
