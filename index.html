@@ -62,33 +62,73 @@
     </div>
 
     <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
-        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-xl overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
             <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
-                <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calendar-alt text-blue-400"></i> Calculadora de Datas</h3>
+                <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calculator text-blue-400"></i> Ferramentas de Data</h3>
                 <button onclick="fecharModalIdade()" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md"><i class="fas fa-times text-sm"></i></button>
             </div>
-            <div class="p-6 space-y-6">
-                <div class="flex gap-4 items-end">
-                    <div class="relative flex-1 group">
-                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Insira uma Data</label>
-                        <div class="relative">
-                            <input id="nasc-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularDatas()" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
-                            <i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg group-focus-within:text-blue-500 transition-colors"></i>
+            
+            <div class="p-6">
+                <div class="flex mb-6 bg-slate-100 p-1 rounded-xl">
+                    <button onclick="alternarModoCalculadora('intervalo')" id="btn-mode-intervalo" class="flex-1 py-2 rounded-l-xl font-bold text-sm bg-blue-600 text-white shadow-md transition"><i class="far fa-calendar-alt mr-2"></i>Intervalo</button>
+                    <button onclick="alternarModoCalculadora('soma')" id="btn-mode-soma" class="flex-1 py-2 rounded-r-xl font-bold text-sm bg-slate-100 text-slate-500 hover:bg-slate-200 transition"><i class="fas fa-plus-circle mr-2"></i>Somar Dias</button>
+                </div>
+
+                <div id="tab-calc-intervalo" class="space-y-6">
+                    <div class="flex gap-4 items-end">
+                        <div class="relative flex-1 group">
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Data de Referência</label>
+                            <div class="relative">
+                                <input id="nasc-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularDatas()" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
+                                <i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg group-focus-within:text-blue-500 transition-colors"></i>
+                            </div>
+                        </div>
+                        <button onclick="calcularDatas()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">Calcular</button>
+                    </div>
+
+                    <div id="idade-resultado-box" class="hidden animate-fade-in space-y-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span><span id="data-nasc-display" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span></div>
+                            <div id="box-destaque-data" class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden group">
+                                <i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10 group-hover:scale-110 transition-transform"></i>
+                                <span id="label-status-data" class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias</span>
+                                <div class="flex items-baseline gap-1"><span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span><span class="text-sm font-bold text-white/80">dias</span></div>
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-3 text-center">
+                            <div class="bg-white border border-slate-200 p-2 rounded-xl shadow-sm"><span id="res-anos" class="block text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div>
+                            <div class="bg-white border border-slate-200 p-2 rounded-xl shadow-sm"><span id="res-meses" class="block text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div>
+                            <div class="bg-white border border-slate-200 p-2 rounded-xl shadow-sm"><span id="res-semanas" class="block text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Sem.</span></div>
+                            <div class="bg-white border border-slate-200 p-2 rounded-xl shadow-sm"><span id="res-dias" class="block text-xl font-black text-slate-700">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div>
                         </div>
                     </div>
-                    <button onclick="calcularDatas()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">Calcular</button>
                 </div>
-                <div id="idade-resultado-box" class="hidden animate-fade-in space-y-4">
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span><span id="data-nasc-display" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span></div>
-                        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden group"><i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10 group-hover:scale-110 transition-transform"></i><span class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias Corridos</span><div class="flex items-baseline gap-1"><span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span><span class="text-sm font-bold text-blue-200">dias</span></div></div>
+
+                <div id="tab-calc-soma" class="hidden space-y-6">
+                    <div class="flex flex-col gap-4">
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Data Início</label>
+                                <input id="soma-start-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" class="w-full p-3 border-2 border-slate-200 rounded-xl text-lg font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all text-center">
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Dias a Somar</label>
+                                <div class="relative">
+                                    <input id="soma-days-input" type="number" placeholder="Ex: 30" class="w-full p-3 pl-8 border-2 border-slate-200 rounded-xl text-lg font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all text-center">
+                                    <span class="absolute left-3 top-4 text-slate-400 font-bold">+</span>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="calcularSomaDias()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-3 rounded-xl shadow-lg shadow-emerald-200 transition transform active:scale-95 flex justify-center items-center gap-2"><i class="fas fa-calculator"></i> Calcular Data Final</button>
                     </div>
-                    <div class="flex items-center gap-4 py-2"><div class="h-px bg-slate-200 flex-1"></div><span class="text-[10px] font-bold text-slate-400 uppercase">Tempo Detalhado</span><div class="h-px bg-slate-200 flex-1"></div></div>
-                    <div class="grid grid-cols-4 gap-3">
-                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-anos" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div>
-                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-meses" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div>
-                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-semanas" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span></div>
-                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-dias" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div>
+
+                    <div id="soma-resultado-box" class="hidden animate-fade-in">
+                         <div class="bg-slate-50 border-2 border-dashed border-emerald-200 rounded-2xl p-6 flex flex-col justify-center items-center relative overflow-hidden">
+                            <div class="absolute top-0 left-0 w-full h-1 bg-emerald-400"></div>
+                            <span class="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1"><i class="far fa-calendar-check mr-1"></i>Data Resultante</span>
+                            <span id="res-soma-data" class="text-4xl font-black text-slate-800 tracking-tight my-1">--/--/----</span>
+                            <span id="res-soma-semana" class="text-sm font-bold text-slate-400 bg-white px-3 py-1 rounded-full border border-slate-100 shadow-sm">---</span>
+                         </div>
                     </div>
                 </div>
             </div>
@@ -462,6 +502,8 @@
     <script src="js/utils.js"></script>
     
     <script src="js/ui-modals.js"></script>
+
+    <script src="js/calculadoras.js"></script>
 
     <script src="js/biblioteca.js"></script>
     <script src="js/dashboard.js"></script>
