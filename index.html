@@ -1,13 +1,242 @@
-<header class="bg-white border-b border-gray-200 py-4 z-40 relative">
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gupy Frases - Sistema de Gestão</title>
+    
+    <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="h-screen overflow-hidden text-slate-800 bg-slate-50 flex flex-col">
+
+    <div id="login-flow" class="flex h-screen w-full items-center justify-center bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 absolute z-[100]">
+        <div class="bg-white p-10 rounded-3xl shadow-2xl w-full max-w-md animate-fade-in">
+            <div class="text-center mb-8">
+                <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-quote-right text-3xl text-blue-600"></i></div>
+                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">Gupy Frases</h1><p class="text-base text-slate-500 mt-2 font-medium">Sistema Interno de Gestão</p>
+            </div>
+            <form onsubmit="event.preventDefault(); fazerLogin();">
+                <div class="mb-4"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Usuário</label><input type="text" id="login-user" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
+                <div class="mb-6"><label class="block text-xs font-bold text-slate-500 uppercase mb-1 ml-1">Senha</label><input type="password" id="login-pass" class="w-full p-3 border rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-slate-50 font-semibold" required></div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 rounded-xl shadow-lg transform transition hover:-translate-y-1 text-lg">Acessar Sistema</button>
+            </form>
+            <div class="mt-8 text-center border-t border-slate-100 pt-4"><p class="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Desenvolvido por Pedro Gabriel</p></div>
+        </div>
+    </div>
+
+    <div id="first-access-modal" class="hidden fixed inset-0 bg-slate-900/80 z-[110] flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md text-center">
+            <h2 class="text-2xl font-bold mb-4">Nova Senha Necessária</h2>
+            <input type="password" id="new-password" placeholder="Nova Senha" class="w-full p-3 border rounded-xl mb-4">
+            <input type="password" id="confirm-password" placeholder="Confirmar Senha" class="w-full p-3 border rounded-xl mb-6">
+            <button onclick="atualizarSenhaPrimeiroAcesso()" class="w-full bg-yellow-500 text-white font-bold py-3 rounded-xl">Salvar e Entrar</button>
+        </div>
+    </div>
+    
+    <div id="modal-cep" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
+            <div class="bg-blue-600 p-5 text-white flex justify-between items-center shadow-lg">
+                <h3 class="font-bold text-lg flex items-center gap-2"><i class="fas fa-map-marked-alt"></i> Consulta CEP</h3>
+                <button onclick="fecharModalCEP()" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center"><i class="fas fa-times text-sm"></i></button>
+            </div>
+            <div class="p-6">
+                <div class="flex gap-2 mb-4">
+                    <input id="cep-input" type="text" placeholder="00000-000" maxlength="9" class="flex-1 p-3.5 border-2 border-slate-100 rounded-xl text-center font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50 transition-all placeholder-slate-300">
+                    <button onclick="buscarCEP()" class="bg-blue-600 text-white px-5 rounded-xl hover:bg-blue-700 shadow-lg shadow-blue-200 transition-transform active:scale-95"><i class="fas fa-search"></i></button>
+                </div>
+                <div id="cep-loading" class="hidden text-center py-8 text-blue-500"><i class="fas fa-circle-notch fa-spin text-3xl"></i><p class="text-xs font-bold mt-2 uppercase tracking-wide">Buscando...</p></div>
+                <div id="cep-resultado" class="hidden bg-slate-50 rounded-xl p-5 border border-slate-100 space-y-3 shadow-inner">
+                    <div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Logradouro</span> <span id="cep-logradouro" class="font-bold text-slate-700 text-right text-sm"></span></div>
+                    <div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Bairro</span> <span id="cep-bairro" class="font-bold text-slate-700 text-right text-sm"></span></div>
+                    <div class="flex justify-between items-baseline border-b border-slate-200 pb-2"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">Localidade</span> <span id="cep-localidade" class="font-bold text-slate-700 text-right text-sm"></span></div>
+                    <div class="flex justify-between items-center pt-1"><span class="text-blue-400 font-bold uppercase text-[10px] tracking-wider">CEP</span> <span id="cep-display-num" class="font-black text-blue-600 text-right text-lg bg-blue-100 px-2 py-0.5 rounded-lg"></span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-idade" class="hidden fixed inset-0 z-[90] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
+            <div class="bg-slate-800 p-5 text-white flex justify-between items-center shadow-lg">
+                <h3 class="font-extrabold text-lg tracking-tight flex items-center gap-2"><i class="fas fa-calendar-alt text-blue-400"></i> Calculadora de Datas</h3>
+                <button onclick="fecharModalIdade()" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md"><i class="fas fa-times text-sm"></i></button>
+            </div>
+            <div class="p-6 space-y-6">
+                <div class="flex gap-4 items-end">
+                    <div class="relative flex-1 group">
+                        <label class="block text-[10px] font-bold text-slate-400 uppercase mb-1 ml-1 tracking-wider">Insira uma Data</label>
+                        <div class="relative">
+                            <input id="nasc-input" type="text" placeholder="DD/MM/AAAA" maxlength="10" oninput="mascaraData(this)" onkeyup="if(event.key === 'Enter') calcularDatas()" class="w-full pl-12 pr-4 py-3 border-2 border-slate-200 rounded-xl text-xl font-black text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-50/50 transition-all placeholder-slate-300 text-center tracking-widest">
+                            <i class="fas fa-calendar-day absolute left-4 top-4 text-slate-300 text-lg group-focus-within:text-blue-500 transition-colors"></i>
+                        </div>
+                    </div>
+                    <button onclick="calcularDatas()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3.5 px-6 rounded-xl shadow-lg shadow-blue-200 transition transform active:scale-95 h-[54px]">Calcular</button>
+                </div>
+                <div id="idade-resultado-box" class="hidden animate-fade-in space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div class="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-center items-center"><span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Data Inserida</span><span id="data-nasc-display" class="text-2xl font-black text-slate-700 font-mono">--/--/----</span></div>
+                        <div class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-xl shadow-blue-200/50 relative overflow-hidden group"><i class="fas fa-infinity absolute -right-4 -bottom-4 text-6xl text-white/10 group-hover:scale-110 transition-transform"></i><span class="text-[10px] font-bold text-blue-200 uppercase tracking-widest mb-1">Total Dias Corridos</span><div class="flex items-baseline gap-1"><span id="res-total-dias" class="text-4xl font-black tracking-tight leading-none">0</span><span class="text-sm font-bold text-blue-200">dias</span></div></div>
+                    </div>
+                    <div class="flex items-center gap-4 py-2"><div class="h-px bg-slate-200 flex-1"></div><span class="text-[10px] font-bold text-slate-400 uppercase">Tempo Detalhado</span><div class="h-px bg-slate-200 flex-1"></div></div>
+                    <div class="grid grid-cols-4 gap-3">
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-anos" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Anos</span></div>
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-meses" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Meses</span></div>
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-semanas" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Semanas</span></div>
+                        <div class="bg-white border border-slate-200 p-3 rounded-xl flex flex-col items-center justify-center shadow-sm hover:border-blue-300 transition group"><span id="res-dias" class="text-2xl font-black text-slate-700 group-hover:text-blue-600 transition">0</span><span class="text-[9px] font-bold text-slate-400 uppercase">Dias</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-frase" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden modal-content relative">
+            <div class="bg-gray-50 px-8 py-5 border-b border-gray-100 flex justify-between items-center">
+                <h3 id="modal-title" class="text-xl font-extrabold text-gray-800 flex items-center gap-2">Nova Frase</h3>
+                <button onclick="fecharModalFrase()" class="text-gray-400 hover:text-red-500 transition text-xl"><i class="fas fa-times"></i></button>
+            </div>
+            
+            <div class="p-8">
+                <input type="hidden" id="id-frase">
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="relative">
+                        <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Empresa</label>
+                        <input id="inp-empresa" type="text" list="list-empresas" placeholder="Ex: Gupy" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 border-gray-200 transition font-bold text-slate-700">
+                        <datalist id="list-empresas"></datalist>
+                    </div>
+                    <div class="relative">
+                        <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Motivo</label>
+                        <input id="inp-motivo" type="text" list="list-motivos" placeholder="Ex: Agradecimento" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 border-gray-200 transition font-bold text-slate-700">
+                        <datalist id="list-motivos"></datalist>
+                    </div>
+                    <div class="relative">
+                        <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Documento</label>
+                        <input id="inp-doc" type="text" list="list-docs" placeholder="Ex: Email" class="w-full p-3 border rounded-xl bg-gray-50 outline-none focus:border-blue-500 border-gray-200 transition font-bold text-slate-700">
+                        <datalist id="list-docs"></datalist>
+                    </div>
+                </div>
+
+                <div class="mb-2">
+                    <label class="text-xs font-extrabold text-gray-500 uppercase mb-1 block ml-1">Conteúdo da Frase</label>
+                    <textarea id="inp-conteudo" rows="5" placeholder="Digite a frase aqui..." class="w-full p-4 border rounded-xl text-lg bg-gray-50 outline-none focus:border-blue-500 border-gray-200 transition text-slate-700 font-medium"></textarea>
+                </div>
+            </div>
+
+            <div class="bg-gray-50 px-8 py-5 border-t border-gray-100 flex justify-end gap-3">
+                <button onclick="fecharModalFrase()" class="px-6 py-2 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-200 transition">Cancelar</button>
+                <button onclick="salvarFrase()" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2 rounded-xl font-bold shadow-lg transition transform active:scale-95">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-usuario" class="hidden fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-3xl w-full max-w-md p-6 shadow-2xl">
+            <h3 id="modal-user-title" class="text-lg font-bold text-slate-700 mb-4">Novo Membro</h3>
+            <input type="hidden" id="id-user-edit">
+            <div class="space-y-3">
+                <input id="nome-novo" type="text" placeholder="Nome Completo" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
+                <input id="user-novo" type="text" placeholder="Login (ID)" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
+                <input id="pass-novo" type="text" placeholder="Senha" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
+                <select id="perfil-novo" class="w-full px-4 py-2 rounded-xl bg-slate-50 border border-slate-200 text-sm outline-none focus:border-blue-500">
+                    <option value="user">Colaborador</option>
+                    <option value="admin">Administrador</option>
+                </select>
+                <div class="flex items-center gap-2 mt-2 ml-1">
+                    <input type="checkbox" id="ativo-novo" class="w-4 h-4 text-blue-600 rounded cursor-pointer accent-blue-600">
+                    <label for="ativo-novo" class="text-sm text-slate-600 font-bold cursor-pointer">Usuário Ativo</label>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end gap-2">
+                <button onclick="fecharModalUsuario()" class="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-50 rounded-lg">Cancelar</button>
+                <button onclick="salvarUsuario()" class="px-4 py-2 text-sm font-bold bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md">Salvar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-log-detalhe" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 transition-all">
+        <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden transform transition-all scale-100 animate-fade-in border border-white/20">
+            <div id="header-modal-log" class="bg-slate-800 p-6 text-white flex justify-between items-center shadow-lg">
+                <div class="flex items-center gap-3">
+                    <div id="modal-log-icon" class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-lg"></div>
+                    <div>
+                        <h3 id="modal-log-titulo" class="font-extrabold text-lg leading-tight">Detalhes</h3>
+                        <p id="modal-log-data" class="text-xs text-slate-300 font-mono opacity-80">--/--/----</p>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('modal-log-detalhe').classList.add('hidden')" class="bg-white/10 hover:bg-white/20 p-2 rounded-full transition w-8 h-8 flex items-center justify-center backdrop-blur-md">
+                    <i class="fas fa-times text-sm"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                    <div class="w-10 h-10 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center font-bold text-sm" id="modal-log-avatar">U</div>
+                    <div class="flex-1">
+                        <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Usuário</p>
+                        <p id="modal-log-user" class="font-bold text-slate-700 text-sm">Nome</p>
+                    </div>
+                    <div id="modal-log-badge"></div>
+                </div>
+                <div>
+                    <p class="text-[10px] uppercase font-bold text-slate-400 tracking-wider mb-2 ml-1">Detalhes da Ação</p>
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm text-slate-600 font-medium leading-relaxed max-h-60 overflow-y-auto custom-scrollbar" id="modal-log-desc">---</div>
+                </div>
+                <button onclick="document.getElementById('modal-log-detalhe').classList.add('hidden')" class="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold py-3 rounded-xl transition">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="app-flow" class="hidden flex flex-col h-screen">
+        
+        <nav class="bg-slate-900 text-slate-300 h-16 flex-shrink-0 shadow-lg z-50">
+            <div class="container mx-auto px-6 h-full flex items-center justify-between">
+                
+                <div class="flex items-center gap-8">
+                    <div class="flex items-center gap-2 text-white cursor-pointer" onclick="navegar('biblioteca')">
+                        <i class="fas fa-quote-right text-blue-500 text-xl"></i>
+                        <span class="font-extrabold text-xl tracking-tight">Gupy<span class="text-blue-500">Frases</span></span>
+                    </div>
+                    <div class="hidden md:flex items-center gap-2">
+                        <button onclick="navegar('biblioteca')" id="menu-biblioteca" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-book-open mr-2"></i>Biblioteca</button>
+                        <div id="admin-menu-items" class="hidden flex gap-2 border-l border-slate-700 pl-2 ml-2">
+                            <button onclick="navegar('equipe')" id="menu-equipe" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-users-cog mr-2"></i>Equipe</button>
+                            <button onclick="navegar('logs')" id="menu-logs" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-history mr-2"></i>Logs</button>
+                            <button onclick="navegar('dashboard')" id="menu-dashboard" class="nav-item px-4 py-2 text-sm font-bold"><i class="fas fa-chart-pie mr-2"></i>Dashboard</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-4 border-l border-slate-700 pl-6">
+                    <div id="global-actions" class="flex gap-2">
+                        <button id="btn-add-global" onclick="abrirModalFrase()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-plus"></i> Nova Frase</button>
+                        <button id="btn-add-member" onclick="abrirModalUsuario()" class="hidden bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-4 py-2 rounded-lg shadow-sm transition items-center gap-2"><i class="fas fa-user-plus"></i> Novo Membro</button>
+                        <button id="btn-refresh-logs" onclick="carregarLogs()" class="hidden bg-white/10 hover:bg-white/20 text-white border border-slate-600 px-4 py-2 rounded-lg text-xs font-bold shadow-sm transition items-center gap-2"><i class="fas fa-sync-alt"></i> Atualizar</button>
+                    </div>
+
+                    <div class="text-right hidden sm:block">
+                        <p id="user-name-display" class="text-sm font-bold text-white leading-none">Usuário</p>
+                        <p id="user-role-display" class="text-[10px] text-blue-400 mt-1 font-extrabold uppercase">...</p>
+                    </div>
+                    <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-md border-2 border-slate-800 text-lg"><span id="avatar-initial">U</span></div>
+                    <button onclick="logout()" class="text-slate-400 hover:text-red-400 transition ml-2" title="Sair"><i class="fas fa-sign-out-alt"></i></button>
+                </div>
+            </div>
+        </nav>
+
+        <header class="bg-white border-b border-gray-200 py-4 z-40 relative">
             <div class="container mx-auto px-6 flex flex-col lg:flex-row gap-4 items-stretch lg:items-center">
                 
                 <div class="relative flex-1 group flex gap-2">
                     <div class="relative flex-1">
                         <input type="text" id="global-search" autocomplete="off" oninput="debounceBusca()" placeholder="🔎 Pesquisar..." 
                             class="w-full pl-12 pr-10 py-3 rounded-xl bg-slate-50 border border-slate-200 focus:bg-white focus:border-blue-500 focus:ring-4 focus:ring-blue-100 text-slate-700 font-semibold transition-all outline-none">
-                        
                         <i class="fas fa-search absolute left-4 top-3.5 text-slate-400 text-lg group-focus-within:text-blue-500 transition-colors"></i>
-                        
                         <button id="btn-clear-search" onclick="limparBuscaGlobal()" class="hidden absolute right-3 top-3.5 text-slate-400 hover:text-red-500 transition-colors p-1 rounded-full hover:bg-slate-100">
                             <i class="fas fa-times-circle text-lg"></i>
                         </button>
@@ -42,3 +271,204 @@
                 </div>
             </div>
         </header>
+
+        <main class="flex-1 overflow-y-auto bg-slate-100 p-6">
+            <div class="container mx-auto max-w-7xl h-full flex flex-col">
+                
+                <section id="view-biblioteca" class="view-section flex-grow">
+                    <div id="grid-frases" class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full pb-20"></div>
+                </section>
+
+                <section id="view-dashboard" class="view-section hidden flex-grow space-y-6">
+                    <div id="painel-dashboard" class="space-y-6">
+                        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Interações</p><p class="text-2xl font-black text-blue-600 mt-1" id="kpi-total-usos">0</p></div>
+                                    <div class="bg-blue-50 text-blue-500 p-2 rounded-lg text-lg"><i class="fas fa-chart-line"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Frases Ativas</p><p class="text-2xl font-black text-slate-700 mt-1" id="kpi-frases-ativas">0</p></div>
+                                    <div class="bg-slate-100 text-slate-500 p-2 rounded-lg text-lg"><i class="fas fa-database"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Sem Uso (90d)</p><div id="contador-sem-uso" class="text-2xl font-black text-green-500 mt-1">0</div></div>
+                                    <div class="bg-orange-50 text-orange-500 p-2 rounded-lg text-lg"><i class="fas fa-stopwatch"></i></div>
+                                </div>
+                            </div>
+                            <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-100 hover:shadow-md transition">
+                                <div class="flex justify-between items-start">
+                                    <div><p class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Membros</p><p class="text-2xl font-black text-purple-600 mt-1" id="kpi-total-users">0</p></div>
+                                    <div class="bg-purple-50 text-purple-500 p-2 rounded-lg text-lg"><i class="fas fa-users"></i></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center"><h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-trophy mr-2 text-yellow-500"></i>Top 5 Mais Ativos</h3></div>
+                                <div class="overflow-x-auto"><table class="w-full text-left"><tbody id="lista-top-users"></tbody></table></div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50 flex justify-between items-center"><h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-user-clock mr-2 text-slate-400"></i>Top 5 Menos Ativos</h3></div>
+                                <div class="overflow-x-auto"><table class="w-full text-left"><tbody id="lista-bottom-users"></tbody></table></div>
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50"><h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-fire mr-2 text-red-500"></i>Frases Mais Utilizadas</h3></div>
+                                <div class="overflow-x-auto"><table class="w-full text-left"><tbody id="lista-top-frases"></tbody></table></div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+                                <div class="px-6 py-4 border-b border-slate-50 bg-slate-50/50"><h3 class="font-bold text-slate-700 text-sm"><i class="fas fa-battery-quarter mr-2 text-orange-400"></i>Frases Menos Usadas</h3></div>
+                                <div class="overflow-x-auto"><table class="w-full text-left"><tbody id="lista-low-frases"></tbody></table></div>
+                            </div>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden mb-10">
+                            <div class="px-6 py-4 border-b border-slate-50 bg-red-50/30 flex justify-between items-center"><h3 class="font-bold text-red-700 text-sm"><i class="fas fa-archive mr-2"></i>Zona de Esquecimento (Sem uso há 90+ dias)</h3></div>
+                            <div class="overflow-x-auto max-h-96 custom-scrollbar"><table class="w-full text-left"><tbody id="lista-frases-sem-uso"></tbody></table></div>
+                        </div>
+                    </div>
+                </section>
+
+                <section id="view-logs" class="view-section hidden flex-grow space-y-6">
+                    <div class="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col md:flex-row gap-4 items-center justify-between">
+                        <div class="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-2 md:pb-0">
+                            <button onclick="filtrarPorCategoriaLog('TODOS')" class="btn-filtro-log active-log-filter px-4 py-2 rounded-lg text-xs font-bold bg-slate-800 text-white transition whitespace-nowrap" data-cat="TODOS">Todos</button>
+                            <button onclick="filtrarPorCategoriaLog('CRIAR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-purple-100 hover:text-purple-600 transition whitespace-nowrap" data-cat="CRIAR">Criação</button>
+                            <button onclick="filtrarPorCategoriaLog('COPIAR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-emerald-100 hover:text-emerald-600 transition whitespace-nowrap" data-cat="COPIAR">Cópias</button>
+                            <button onclick="filtrarPorCategoriaLog('EDITAR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-amber-100 hover:text-amber-600 transition whitespace-nowrap" data-cat="EDITAR">Edição</button>
+                            <button onclick="filtrarPorCategoriaLog('EXCLUIR')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-red-100 hover:text-red-600 transition whitespace-nowrap" data-cat="EXCLUIR">Exclusão</button>
+                            <button onclick="filtrarPorCategoriaLog('LOGIN')" class="btn-filtro-log px-4 py-2 rounded-lg text-xs font-bold bg-slate-100 text-slate-600 hover:bg-blue-100 hover:text-blue-600 transition whitespace-nowrap" data-cat="LOGIN">Acessos</button>
+                        </div>
+                    </div>
+
+                    <div id="container-logs-agrupados" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 pb-10"></div>
+                </section>
+
+                <section id="view-equipe" class="view-section hidden flex-grow">
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 pb-10">
+                        
+                        <div class="lg:col-span-2 flex flex-col gap-4">
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-full">
+                                <div class="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex justify-between items-center">
+                                    <div class="flex items-center gap-3">
+                                        <div class="bg-blue-100 text-blue-600 w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm">
+                                            <i class="fas fa-users-cog"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="font-extrabold text-slate-700 text-lg leading-tight">Gestão de Acesso</h3>
+                                            <p class="text-xs text-slate-400 font-bold uppercase tracking-wide">Membros ativos e permissões</p>
+                                        </div>
+                                    </div>
+                                    <span id="equipe-total-badge" class="bg-slate-200 text-slate-600 text-xs font-bold px-3 py-1 rounded-full">0 membros</span>
+                                </div>
+                                <div id="lista-equipe-container" class="flex-grow overflow-x-auto"></div>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-col gap-6">
+                            
+                            <div class="bg-white rounded-2xl shadow-sm border border-emerald-100 overflow-hidden relative group">
+                                <div class="absolute top-0 left-0 w-1.5 h-full bg-emerald-500"></div>
+                                <div class="p-6">
+                                    <div class="flex items-center gap-3 mb-4">
+                                        <div class="bg-emerald-100 text-emerald-600 w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm">
+                                            <i class="fas fa-file-excel"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="font-extrabold text-slate-700 text-base">Importar Frases</h3>
+                                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Via Excel (.xlsx)</p>
+                                        </div>
+                                    </div>
+                                    <p class="text-xs text-slate-500 mb-4 leading-relaxed">Adicione centenas de frases de uma vez. Baixe o modelo para garantir a formatação.</p>
+                                    <div class="flex flex-col gap-2">
+                                        <button onclick="baixarModeloExcel()" class="text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 py-2 px-3 rounded-lg transition text-left flex items-center gap-2 border border-dashed border-emerald-200"><i class="fas fa-download"></i> Baixar Modelo</button>
+                                        <label class="cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-4 rounded-xl shadow-md shadow-emerald-200 transition transform active:scale-95 text-center flex justify-center items-center gap-2">
+                                            <i class="fas fa-upload"></i> Selecionar Arquivo
+                                            <input type="file" id="input-excel" accept=".xlsx, .xls" class="hidden" onchange="processarUploadExcel(this)">
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative group">
+                                <div class="absolute top-0 left-0 w-1.5 h-full bg-slate-500"></div>
+                                <div class="p-6">
+                                    <div class="flex items-center gap-3 mb-4">
+                                        <div class="bg-slate-100 text-slate-600 w-10 h-10 rounded-xl flex items-center justify-center text-lg shadow-sm">
+                                            <i class="fas fa-database"></i>
+                                        </div>
+                                        <div>
+                                            <h3 class="font-extrabold text-slate-700 text-base">Dados do Sistema</h3>
+                                            <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">Manutenção</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="grid grid-cols-2 gap-3 mb-3">
+                                        <button onclick="baixarBackup()" class="flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-blue-50 hover:border-blue-200 hover:text-blue-600 transition group/btn">
+                                            <i class="fas fa-cloud-download-alt text-xl mb-1 text-slate-400 group-hover/btn:text-blue-500"></i>
+                                            <span class="text-[10px] font-bold uppercase">Exportar</span>
+                                        </button>
+                                        <label class="cursor-pointer flex flex-col items-center justify-center p-3 rounded-xl bg-slate-50 border border-slate-200 hover:bg-orange-50 hover:border-orange-200 hover:text-orange-600 transition group/btn">
+                                            <i class="fas fa-cloud-upload-alt text-xl mb-1 text-slate-400 group-hover/btn:text-orange-500"></i>
+                                            <span class="text-[10px] font-bold uppercase">Restaurar</span>
+                                            <input type="file" id="input-backup" accept=".json" class="hidden" onchange="restaurarBackup(this)">
+                                        </label>
+                                    </div>
+
+                                    <button onclick="removerDuplicadasEmMassa()" class="w-full flex items-center justify-center gap-2 p-3 rounded-xl bg-red-50 border border-red-100 text-red-500 hover:bg-red-100 hover:text-red-700 transition font-bold text-xs">
+                                        <i class="fas fa-broom"></i> Remover Frases Duplicadas
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </section>
+                
+                <footer class="mt-auto pt-6 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest pb-4">Desenvolvido por Pedro Gabriel</footer>
+            </div>
+        </main>
+
+        <div id="chat-container" class="fixed bottom-6 right-6 z-50">
+            <button onclick="toggleChat()" id="chat-toggle-btn" class="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center transition transform hover:scale-110 active:scale-95 relative">
+                <i class="fas fa-comments text-2xl"></i>
+                <span id="badge-online" class="absolute top-0 right-0 w-4 h-4 bg-green-500 border-2 border-white rounded-full hidden"></span>
+                <span id="badge-unread" class="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full border-2 border-slate-900 hidden">0</span>
+            </button>
+            <div id="chat-window" class="absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col chat-widget chat-closed" style="height: 450px;">
+                <div class="bg-slate-900 text-white p-3 flex justify-between items-center shadow-md"><div><h4 class="font-bold text-sm">Chat da Equipe</h4><span id="online-count" class="text-[10px] text-slate-300">Offline</span></div><button onclick="toggleChat()"><i class="fas fa-times"></i></button></div>
+                <div id="online-users-list" class="bg-slate-50 border-b border-slate-200 px-4 py-1 text-[10px] text-slate-500 hidden"></div>
+                <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-3 bg-slate-50 text-xs"></div>
+                <div class="p-2 bg-white border-t border-slate-100 flex gap-2"><input type="text" id="chat-input" class="flex-1 bg-slate-100 border-0 rounded-lg px-3 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none" placeholder="Mensagem..." onkeypress="if(event.key === 'Enter') enviarMensagem()"><button onclick="enviarMensagem()" class="bg-blue-600 text-white w-8 h-8 rounded-lg flex items-center justify-center"><i class="fas fa-paper-plane text-xs"></i></button></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="js/config.js"></script>
+    
+    <script src="js/utils.js"></script>
+    
+    <script src="js/ui-modals.js"></script>
+
+    <script src="js/biblioteca.js"></script>
+    <script src="js/dashboard.js"></script>
+    <script src="js/logs.js"></script>
+    <script src="js/equipe.js"></script>
+    
+    <script src="js/app.js"></script>
+
+</body>
+</html>
