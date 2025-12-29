@@ -80,7 +80,7 @@ function entrarNoSistema() {
         carregarNomesChat();
         navegar('biblioteca'); 
         iniciarHeartbeat(); 
-        iniciarChat(); // Inicia o chat robusto
+        iniciarChat(); 
     } catch (error) {
         console.error("Erro entrarNoSistema:", error);
         navegar('biblioteca');
@@ -172,7 +172,7 @@ function debounceBusca() {
     }, 300); 
 }
 
-// --- FUNÇÕES DE CHAT (Arquivos e Voz) ---
+// --- FUNÇÕES DE CHAT (Robustas & Otimistas) ---
 
 async function carregarNomesChat() {
     const { data } = await _supabase.from('usuarios').select('username, nome');
@@ -185,59 +185,72 @@ async function updateOnline() { const {data} = await _supabase.from('usuarios').
 
 function toggleChat() { const w = document.getElementById('chat-window'); chatAberto = !chatAberto; w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; if(chatAberto){ document.getElementById('online-users-list').classList.remove('hidden'); iniciarChat(); const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-orange-500', 'animate-bounce'); btn.classList.add('bg-blue-600'); document.getElementById('badge-unread').classList.add('hidden'); } }
 
-// 1. Inicia o Chat (Carrega msg antigas e liga o Realtime)
 function iniciarChat() {
     const container = document.getElementById('chat-messages');
-    container.innerHTML = '<div class="text-center text-slate-400 py-4"><i class="fas fa-circle-notch fa-spin"></i> Carregando...</div>';
+    // Carrega histórico apenas se estiver vazio ou recarregando
+    if(container.innerHTML === '') {
+        container.innerHTML = '<div class="text-center text-slate-400 py-4"><i class="fas fa-circle-notch fa-spin"></i> Conectando...</div>';
+    }
 
-    // Carrega histórico
     _supabase.from('chat_mensagens')
         .select('*')
         .order('created_at',{ascending:true})
         .limit(50)
         .then(({data, error})=>{
-            container.innerHTML = ''; // Limpa loading
-            if(data) data.forEach(m => addMsg(m, true));
+            if(!data) return;
+            // Limpa o loading
+            if(container.innerHTML.includes('Conectando')) container.innerHTML = '';
+            
+            data.forEach(m => addMsg(m, true));
         });
 
-    // Remove subscrições antigas para evitar duplicidade
     _supabase.removeAllChannels();
 
-    // Inscreve no canal Realtime
     _supabase.channel('chat-room')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens' }, payload => {
+            // Só adiciona se já não estiver na tela (Evita duplicidade)
             addMsg(payload.new, false);
         })
-        .subscribe((status) => {
-            if (status === 'SUBSCRIBED') {
-                console.log('Chat conectado!');
-            }
-        });
+        .subscribe();
 }
 
-// 2. Enviar Texto
+// 2. Enviar Texto (Otimizado: Mostra na tela na hora)
 async function enviarMensagemTexto() {
     const input = document.getElementById('chat-input');
     const texto = input.value.trim();
     if (!texto) return;
 
-    input.value = ''; // Limpa rápido
+    input.value = ''; 
     input.focus();
 
-    await _supabase.from('chat_mensagens').insert([{
-        usuario: usuarioLogado.username,
-        mensagem: texto,
-        perfil: usuarioLogado.perfil,
-        tipo: 'texto'
-    }]);
+    try {
+        // Usa .select() para receber o objeto criado de volta
+        const { data, error } = await _supabase.from('chat_mensagens').insert([{
+            usuario: usuarioLogado.username,
+            mensagem: texto,
+            perfil: usuarioLogado.perfil,
+            tipo: 'texto'
+        }]).select();
+
+        if (error) throw error;
+
+        // Atualização Otimista: Se salvou no banco, mostra na tela
+        // (Isso resolve o problema do WebSocket travado)
+        if (data && data.length > 0) {
+            addMsg(data[0], false);
+        }
+
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Erro', 'Não foi possível enviar a mensagem.', 'error');
+    }
 }
 
-// 3. Enviar Arquivo (Imagem/PDF/etc)
+// 3. Enviar Arquivo (Otimizado)
 async function enviarArquivoSelecionado(input) {
     const file = input.files[0];
     if (!file) return;
 
-    // Feedback visual
     const btn = document.querySelector('button[title="Enviar Arquivo"] i');
     const originalIcon = btn.className;
     btn.className = "fas fa-circle-notch fa-spin text-blue-500";
@@ -247,25 +260,28 @@ async function enviarArquivoSelecionado(input) {
         const fileName = `${Date.now()}_${Math.random()}.${fileExt}`;
         const filePath = `${fileName}`;
 
-        // Upload para Storage 'chat-files'
         const { error: uploadError } = await _supabase.storage.from('chat-files').upload(filePath, file);
         if (uploadError) throw uploadError;
 
-        // Pega URL pública
         const { data: publicData } = _supabase.storage.from('chat-files').getPublicUrl(filePath);
-        const publicUrl = publicData.publicUrl;
-
-        // Insere mensagem
-        await _supabase.from('chat_mensagens').insert([{
+        
+        const { data: msgData, error: msgError } = await _supabase.from('chat_mensagens').insert([{
             usuario: usuarioLogado.username,
-            mensagem: file.name, // Texto de fallback
+            mensagem: file.name,
             perfil: usuarioLogado.perfil,
             tipo: 'arquivo',
-            url_arquivo: publicUrl,
+            url_arquivo: publicData.publicUrl,
             nome_arquivo: file.name
-        }]);
+        }]).select();
 
-        input.value = ''; // Limpa input
+        if (msgError) throw msgError;
+
+        // Mostra na tela imediatamente
+        if (msgData && msgData.length > 0) {
+            addMsg(msgData[0], false);
+        }
+
+        input.value = ''; 
     } catch (e) {
         console.error(e);
         Swal.fire('Erro', 'Falha ao enviar arquivo', 'error');
@@ -274,7 +290,7 @@ async function enviarArquivoSelecionado(input) {
     }
 }
 
-// 4. Gravação de Voz
+// 4. Gravação de Voz (Otimizada)
 async function toggleGravacao() {
     if (!mediaRecorder || mediaRecorder.state === 'inactive') {
         iniciarGravacao();
@@ -296,8 +312,6 @@ async function iniciarGravacao() {
         mediaRecorder.onstop = async () => {
             const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
             enviarAudioBlob(audioBlob);
-            
-            // Para as tracks para soltar o microfone
             stream.getTracks().forEach(track => track.stop());
         };
 
@@ -325,54 +339,53 @@ async function enviarAudioBlob(blob) {
 
         const { data: publicData } = _supabase.storage.from('chat-files').getPublicUrl(fileName);
         
-        await _supabase.from('chat_mensagens').insert([{
+        const { data: msgData, error: msgError } = await _supabase.from('chat_mensagens').insert([{
             usuario: usuarioLogado.username,
             mensagem: 'Mensagem de Voz',
             perfil: usuarioLogado.perfil,
             tipo: 'audio',
             url_arquivo: publicData.publicUrl
-        }]);
+        }]).select();
+
+        if (msgError) throw msgError;
+
+        // Mostra na tela imediatamente
+        if (msgData && msgData.length > 0) {
+            addMsg(msgData[0], false);
+        }
+
     } catch (e) {
         console.error("Erro upload audio:", e);
     }
 }
 
-// 5. Renderizar Mensagem (Com suporte a Tipos)
+// 5. Renderizar Mensagem (Com Anti-Duplicidade)
 function addMsg(msg, isHistory) {
+    // 1. Prevenção de Duplicidade: Verifica se a msg já existe na tela pelo ID
+    if (document.getElementById(`msg-${msg.id}`)) return;
+
     const c = document.getElementById('chat-messages');
     const me = msg.usuario === usuarioLogado.username;
     const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario;
     
-    // Tratamento de tipos
     let contentHtml = '';
     
     if (msg.tipo === 'audio' && msg.url_arquivo) {
-        // PLAYER DE ÁUDIO
-        contentHtml = `
-            <audio controls class="w-full max-w-[200px] h-8 mt-1" src="${msg.url_arquivo}"></audio>
-        `;
+        contentHtml = `<audio controls class="w-full max-w-[200px] h-8 mt-1" src="${msg.url_arquivo}"></audio>`;
     } else if (msg.tipo === 'arquivo' && msg.url_arquivo) {
-        // IMAGEM ou ARQUIVO
         const ext = msg.nome_arquivo ? msg.nome_arquivo.split('.').pop().toLowerCase() : '';
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-            contentHtml = `
-                <a href="${msg.url_arquivo}" target="_blank">
-                    <img src="${msg.url_arquivo}" class="max-w-[150px] rounded-lg mt-1 border border-white/20" alt="Imagem">
-                </a>`;
+            contentHtml = `<a href="${msg.url_arquivo}" target="_blank"><img src="${msg.url_arquivo}" class="max-w-[150px] rounded-lg mt-1 border border-white/20" alt="Imagem"></a>`;
         } else {
-            contentHtml = `
-                <a href="${msg.url_arquivo}" target="_blank" class="flex items-center gap-2 bg-slate-100 p-2 rounded-lg mt-1 hover:bg-slate-200 text-slate-700 no-underline">
-                    <i class="fas fa-file-download text-lg text-blue-500"></i>
-                    <span class="text-xs font-bold underline decoration-dotted truncate max-w-[120px]">${msg.nome_arquivo || 'Arquivo'}</span>
-                </a>`;
+            contentHtml = `<a href="${msg.url_arquivo}" target="_blank" class="flex items-center gap-2 bg-slate-100 p-2 rounded-lg mt-1 hover:bg-slate-200 text-slate-700 no-underline"><i class="fas fa-file-download text-lg text-blue-500"></i><span class="text-xs font-bold underline decoration-dotted truncate max-w-[120px]">${msg.nome_arquivo || 'Arquivo'}</span></a>`;
         }
     } else {
-        // TEXTO PADRÃO
         contentHtml = `<span>${msg.mensagem}</span>`;
     }
 
+    // Adicionado ID único no wrapper para controle de duplicidade
     const html = `
-        <div class="flex flex-col ${me?'items-end':'items-start'} mb-3 animate-fade-in">
+        <div id="msg-${msg.id}" class="flex flex-col ${me?'items-end':'items-start'} mb-3 animate-fade-in">
             <span class="text-[9px] text-gray-400 font-bold ml-1 mb-0.5">${me?'':nomeMostrar}</span>
             <div class="px-3 py-2 rounded-2xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm flex flex-col">
                 ${contentHtml}
@@ -390,10 +403,8 @@ function addMsg(msg, isHistory) {
     }
 }
 
-// --- FIM FUNÇÕES CHAT ---
-
 // --- CALCULADORA UNIVERSAL ---
-let modoCalculadora = 'intervalo'; // 'intervalo' ou 'soma'
+let modoCalculadora = 'intervalo'; 
 
 function mudarModoCalculadora(modo) {
     modoCalculadora = modo;
@@ -465,46 +476,37 @@ function calcularModoSoma(dataBase) {
 
     if (isNaN(diasParaSomar)) return Swal.fire('Atenção', 'Digite a quantidade de dias.', 'warning');
 
-    // 1. Calcula a Data Futura
     const dataFutura = new Date(dataBase);
     dataFutura.setDate(dataFutura.getDate() + diasParaSomar);
 
-    // 2. Prepara variáveis para comparação (Zerando horas para evitar erros)
     const hoje = new Date();
     hoje.setHours(0,0,0,0);
-    
     const dataComparacao = new Date(dataFutura);
     dataComparacao.setHours(0,0,0,0);
 
-    // 3. Formatação
     const dia = String(dataFutura.getDate()).padStart(2, '0');
     const mes = String(dataFutura.getMonth() + 1).padStart(2, '0');
     const ano = dataFutura.getFullYear();
     const diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
     const diaSemanaTexto = diasSemana[dataFutura.getDay()];
 
-    // 4. Elementos da Tela
     const box = document.getElementById('box-resultado-soma');
     const label = document.getElementById('label-resultado-soma');
     const textoData = document.getElementById('res-data-futura');
     const textoSemana = document.getElementById('res-dia-semana');
 
-    // Limpa classes anteriores
     box.className = "border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300";
     label.className = "text-xs font-bold uppercase tracking-widest mb-2";
     textoData.className = "text-4xl md:text-5xl font-black mb-2 font-mono";
     textoSemana.className = "text-sm font-bold px-3 py-1 rounded-lg";
 
-    // 5. Lógica Vencido vs Futuro
     if (dataComparacao < hoje) {
-        // VENCIDO (VERMELHO)
         box.classList.add('bg-red-50', 'border-red-100');
         label.classList.add('text-red-500');
         label.innerText = "⚠️ Boleto Vencido"; 
         textoData.classList.add('text-red-700');
         textoSemana.classList.add('text-red-600', 'bg-red-100');
     } else {
-        // FUTURO (VERDE)
         box.classList.add('bg-emerald-50', 'border-emerald-100');
         label.classList.add('text-emerald-500');
         label.innerText = "A data futura será";
@@ -512,11 +514,9 @@ function calcularModoSoma(dataBase) {
         textoSemana.classList.add('text-emerald-600', 'bg-emerald-100');
     }
 
-    // Define valores
     textoData.innerText = `${dia}/${mes}/${ano}`;
     textoSemana.innerText = diaSemanaTexto;
 
-    // Exibe
     document.getElementById('resultado-soma').classList.remove('hidden');
     document.getElementById('resultado-intervalo').classList.add('hidden');
 }
