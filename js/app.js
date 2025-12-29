@@ -41,7 +41,6 @@ async function fazerLogin() {
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado));
             
-            // Marca o login de hoje para não duplicar na cópia
             localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]); 
             
             if(usuarioLogado.primeiro_acesso) {
@@ -96,7 +95,6 @@ async function atualizarSenhaPrimeiroAcesso() {
     localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
     document.getElementById('first-access-modal').classList.add('hidden'); 
     
-    // Marca hoje também
     localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]);
     registrarLog('LOGIN', 'Ativou conta e acessou');
     entrarNoSistema();
@@ -278,29 +276,67 @@ function calcularModoIntervalo(dNasc, textoOriginal) {
 function calcularModoSoma(dataBase) {
     const inputDias = document.getElementById('calc-dias-input');
     const diasParaSomar = parseInt(inputDias.value);
-    if (isNaN(diasParaSomar)) return Swal.fire('Atenção', 'Digite a quantidade de dias para somar.', 'warning');
 
+    if (isNaN(diasParaSomar)) return Swal.fire('Atenção', 'Digite a quantidade de dias.', 'warning');
+
+    // 1. Calcula a Data Futura
     const dataFutura = new Date(dataBase);
     dataFutura.setDate(dataFutura.getDate() + diasParaSomar);
 
+    // 2. Comparações (Zerando horas para evitar erros)
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+    
+    const dataComparacao = new Date(dataFutura);
+    dataComparacao.setHours(0,0,0,0);
+
+    // 3. Formatação
     const dia = String(dataFutura.getDate()).padStart(2, '0');
     const mes = String(dataFutura.getMonth() + 1).padStart(2, '0');
     const ano = dataFutura.getFullYear();
     const diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+    const diaSemanaTexto = diasSemana[dataFutura.getDay()];
 
-    document.getElementById('res-data-futura').innerText = `${dia}/${mes}/${ano}`;
-    document.getElementById('res-dia-semana').innerText = diasSemana[dataFutura.getDay()];
+    // 4. Elementos da Tela
+    const box = document.getElementById('box-resultado-soma');
+    const label = document.getElementById('label-resultado-soma');
+    const textoData = document.getElementById('res-data-futura');
+    const textoSemana = document.getElementById('res-dia-semana');
+
+    // Limpa classes anteriores
+    box.className = "border-2 rounded-3xl p-8 flex flex-col justify-center items-center text-center shadow-sm transition-colors duration-300";
+    label.className = "text-xs font-bold uppercase tracking-widest mb-2";
+    textoData.className = "text-4xl md:text-5xl font-black mb-2 font-mono";
+    textoSemana.className = "text-sm font-bold px-3 py-1 rounded-lg";
+
+    // 5. Lógica Vencido vs Futuro
+    if (dataComparacao < hoje) {
+        // VENCIDO (VERMELHO)
+        box.classList.add('bg-red-50', 'border-red-100');
+        label.classList.add('text-red-500');
+        label.innerText = "⚠️ Boleto Vencido"; 
+        textoData.classList.add('text-red-700');
+        textoSemana.classList.add('text-red-600', 'bg-red-100');
+    } else {
+        // FUTURO (VERDE)
+        box.classList.add('bg-emerald-50', 'border-emerald-100');
+        label.classList.add('text-emerald-500');
+        label.innerText = "A data futura será";
+        textoData.classList.add('text-emerald-700');
+        textoSemana.classList.add('text-emerald-600', 'bg-emerald-100');
+    }
+
+    // Define valores
+    textoData.innerText = `${dia}/${mes}/${ano}`;
+    textoSemana.innerText = diaSemanaTexto;
+
+    // Exibe
     document.getElementById('resultado-soma').classList.remove('hidden');
     document.getElementById('resultado-intervalo').classList.add('hidden');
 }
 
+// Função para abrir pelo Header (Substituindo a antiga input lógica)
 function calcularIdadeHeader() {
-    const val = document.getElementById('quick-idade').value;
-    if(val.length === 10) { 
-        document.getElementById('calc-data-input').value = val; 
-        document.getElementById('quick-idade').value = ''; 
-        mudarModoCalculadora('intervalo');
-        processarCalculadora(); 
-        document.getElementById('modal-idade').classList.remove('hidden'); 
-    }
+    // Mantido por compatibilidade caso algum input antigo exista, mas agora usamos abrirModalCalculadora
+    abrirModalCalculadora();
 }
