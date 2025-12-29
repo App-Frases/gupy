@@ -41,7 +41,7 @@ async function fazerLogin() {
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado));
             
-            // Marca o login de hoje para não duplicar log na cópia
+            // Marca o login de hoje para não duplicar na cópia
             localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]); 
             
             if(usuarioLogado.primeiro_acesso) {
@@ -96,6 +96,7 @@ async function atualizarSenhaPrimeiroAcesso() {
     localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
     document.getElementById('first-access-modal').classList.add('hidden'); 
     
+    // Marca hoje também
     localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]);
     registrarLog('LOGIN', 'Ativou conta e acessou');
     entrarNoSistema();
@@ -153,7 +154,6 @@ function navegar(pagina) {
     const inputBusca = document.getElementById('global-search');
     if(inputBusca) { 
         inputBusca.value = ''; 
-        document.getElementById('btn-clear-search').classList.add('hidden');
         inputBusca.disabled = (pagina === 'dashboard'); 
         if(pagina === 'biblioteca') inputBusca.placeholder = "🔎 Pesquisar frases...";
         else if(pagina === 'equipe') inputBusca.placeholder = "🔎 Buscar membro...";
@@ -163,35 +163,13 @@ function navegar(pagina) {
 }
 
 function debounceBusca() { 
-    // Controle Visual do Botão "X"
-    const input = document.getElementById('global-search');
-    const btnLimpar = document.getElementById('btn-clear-search');
-    
-    if (input.value.trim().length > 0) {
-        btnLimpar.classList.remove('hidden');
-    } else {
-        btnLimpar.classList.add('hidden');
-    }
-
     clearTimeout(debounceTimer); 
     debounceTimer = setTimeout(() => {
-        const termo = input.value.toLowerCase();
+        const termo = document.getElementById('global-search').value.toLowerCase();
         if (abaAtiva === 'biblioteca' && typeof aplicarFiltros === 'function') aplicarFiltros();
         if (abaAtiva === 'equipe' && typeof filtrarEquipe === 'function') filtrarEquipe(termo);
         if (abaAtiva === 'logs' && typeof filtrarLogs === 'function') filtrarLogs(termo);
     }, 300); 
-}
-
-function limparBuscaGlobal() {
-    const input = document.getElementById('global-search');
-    input.value = '';
-    document.getElementById('btn-clear-search').classList.add('hidden');
-    
-    if (abaAtiva === 'biblioteca' && typeof aplicarFiltros === 'function') aplicarFiltros();
-    if (abaAtiva === 'equipe' && typeof filtrarEquipe === 'function') filtrarEquipe('');
-    if (abaAtiva === 'logs' && typeof filtrarLogs === 'function') filtrarLogs('');
-    
-    input.focus(); 
 }
 
 // --- Funções de Chat e Header ---
@@ -205,3 +183,124 @@ function toggleChat() { const w = document.getElementById('chat-window'); chatAb
 function iniciarChat() { _supabase.from('chat_mensagens').select('*').order('created_at',{ascending:true}).limit(50).then(({data})=>{if(data)data.forEach(m => addMsg(m, true))}); _supabase.channel('chat').on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensagens'},p=>addMsg(p.new, false)).subscribe(); }
 async function enviarMensagem() { const i = document.getElementById('chat-input'); if(i.value.trim()){ await _supabase.from('chat_mensagens').insert([{usuario:usuarioLogado.username, mensagem:i.value.trim(), perfil:usuarioLogado.perfil}]); i.value=''; } }
 function addMsg(msg, isHistory) { const c = document.getElementById('chat-messages'); const me = msg.usuario === usuarioLogado.username; const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario; c.innerHTML += `<div class="flex flex-col ${me?'items-end':'items-start'} mb-2"><span class="text-[9px] text-gray-400 font-bold ml-1">${me?'':nomeMostrar}</span><div class="px-3 py-2 rounded-xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm">${msg.mensagem}</div></div>`; c.scrollTop = c.scrollHeight; if (!isHistory && !chatAberto && !me) { const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-blue-600'); btn.classList.add('bg-orange-500', 'animate-bounce'); document.getElementById('badge-unread').classList.remove('hidden'); } }
+
+// Funções Header (CEP)
+function buscarCEPHeader() {
+    const val = document.getElementById('quick-cep').value;
+    if(val.length >= 8) { document.getElementById('cep-input').value = val; buscarCEP(); document.getElementById('quick-cep').value = ''; document.getElementById('modal-cep').classList.remove('hidden'); }
+}
+async function buscarCEP() {
+    const cep = document.getElementById('cep-input').value.replace(/\D/g, ''); 
+    const resArea = document.getElementById('cep-resultado'); 
+    const loading = document.getElementById('cep-loading');
+    if(cep.length !== 8) return Swal.fire('Atenção', 'Digite um CEP válido', 'warning');
+    resArea.classList.add('hidden'); loading.classList.remove('hidden');
+    try { 
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); 
+        const data = await res.json(); 
+        loading.classList.add('hidden');
+        if(data.erro) return Swal.fire('Não Encontrado', 'CEP não existe', 'info');
+        document.getElementById('cep-logradouro').innerText = data.logradouro || '---'; 
+        document.getElementById('cep-bairro').innerText = data.bairro || '---'; 
+        document.getElementById('cep-localidade').innerText = `${data.localidade}-${data.uf}`;
+        document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
+        resArea.classList.remove('hidden');
+    } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na conexão', 'error'); }
+}
+
+// --- CALCULADORA UNIVERSAL ---
+let modoCalculadora = 'intervalo'; // 'intervalo' ou 'soma'
+
+function mudarModoCalculadora(modo) {
+    modoCalculadora = modo;
+    const btnIntervalo = document.getElementById('btn-mode-intervalo');
+    const btnSoma = document.getElementById('btn-mode-soma');
+    
+    if (modo === 'intervalo') {
+        btnIntervalo.className = "px-4 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition";
+        btnSoma.className = "px-4 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
+        document.getElementById('container-input-dias').classList.add('hidden');
+        document.getElementById('resultado-soma').classList.add('hidden');
+        document.getElementById('label-data-base').innerText = "Data Inicial / Nascimento";
+    } else {
+        btnSoma.className = "px-4 py-2 rounded-lg text-sm font-bold shadow-sm bg-white text-blue-600 transition";
+        btnIntervalo.className = "px-4 py-2 rounded-lg text-sm font-bold text-slate-500 hover:text-slate-700 transition";
+        document.getElementById('container-input-dias').classList.remove('hidden');
+        document.getElementById('resultado-intervalo').classList.add('hidden');
+        document.getElementById('label-data-base').innerText = "Data Inicial";
+    }
+}
+
+function processarCalculadora() {
+    const valData = document.getElementById('calc-data-input').value;
+    if(valData.length !== 10) return Swal.fire('Data incompleta', 'Formato DD/MM/AAAA', 'warning');
+    
+    const parts = valData.split('/'); 
+    const dataBase = new Date(parts[2], parts[1]-1, parts[0]);
+    if (isNaN(dataBase.getTime())) return Swal.fire('Erro', 'Data inválida', 'error');
+
+    if (modoCalculadora === 'intervalo') {
+        calcularModoIntervalo(dataBase, valData);
+    } else {
+        calcularModoSoma(dataBase);
+    }
+}
+
+function calcularModoIntervalo(dNasc, textoOriginal) {
+    const hoje = new Date(); 
+    dNasc.setHours(0,0,0,0); hoje.setHours(0,0,0,0);
+    if (dNasc > hoje) return Swal.fire('Erro', 'Para calcular idade, a data não pode ser futura.', 'warning');
+    
+    const diffTime = Math.abs(hoje - dNasc);
+    const totalDias = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    let anos = hoje.getFullYear() - dNasc.getFullYear();
+    let meses = hoje.getMonth() - dNasc.getMonth();
+    let diasRestantes = hoje.getDate() - dNasc.getDate();
+
+    if (diasRestantes < 0) { meses--; diasRestantes += new Date(hoje.getFullYear(), hoje.getMonth(), 0).getDate(); }
+    if (meses < 0) { anos--; meses += 12; }
+    
+    const semanas = Math.floor(diasRestantes / 7);
+    const diasFinais = diasRestantes % 7;
+    
+    document.getElementById('res-data-base').innerText = textoOriginal;
+    document.getElementById('res-total-dias').innerText = totalDias.toLocaleString('pt-BR');
+    document.getElementById('res-anos').innerText = anos;
+    document.getElementById('res-meses').innerText = meses;
+    document.getElementById('res-semanas').innerText = semanas;
+    document.getElementById('res-dias').innerText = diasFinais;
+    
+    document.getElementById('resultado-intervalo').classList.remove('hidden');
+    document.getElementById('resultado-soma').classList.add('hidden');
+}
+
+function calcularModoSoma(dataBase) {
+    const inputDias = document.getElementById('calc-dias-input');
+    const diasParaSomar = parseInt(inputDias.value);
+    if (isNaN(diasParaSomar)) return Swal.fire('Atenção', 'Digite a quantidade de dias para somar.', 'warning');
+
+    const dataFutura = new Date(dataBase);
+    dataFutura.setDate(dataFutura.getDate() + diasParaSomar);
+
+    const dia = String(dataFutura.getDate()).padStart(2, '0');
+    const mes = String(dataFutura.getMonth() + 1).padStart(2, '0');
+    const ano = dataFutura.getFullYear();
+    const diasSemana = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+    document.getElementById('res-data-futura').innerText = `${dia}/${mes}/${ano}`;
+    document.getElementById('res-dia-semana').innerText = diasSemana[dataFutura.getDay()];
+    document.getElementById('resultado-soma').classList.remove('hidden');
+    document.getElementById('resultado-intervalo').classList.add('hidden');
+}
+
+function calcularIdadeHeader() {
+    const val = document.getElementById('quick-idade').value;
+    if(val.length === 10) { 
+        document.getElementById('calc-data-input').value = val; 
+        document.getElementById('quick-idade').value = ''; 
+        mudarModoCalculadora('intervalo');
+        processarCalculadora(); 
+        document.getElementById('modal-idade').classList.remove('hidden'); 
+    }
+}
