@@ -1,4 +1,4 @@
-// js/ui-modals.js
+// Local: js/ui-modals.js
 
 // --- Modal CEP ---
 function fecharModalCEP() { 
@@ -7,15 +7,17 @@ function fecharModalCEP() {
 
 // --- Modal Idade (Calculadora) ---
 function abrirModalCalculadora() {
-    // Reseta inputs ao abrir
-    document.getElementById('calc-data-input').value = '';
-    document.getElementById('quick-idade').value = '';
+    // 1. Reseta o input principal
+    const inputMain = document.getElementById('calc-data-input');
+    if(inputMain) inputMain.value = '';
     
-    // Abre no modo padrão
+    // 2. Abre no modo padrão (Intervalo)
+    // Verifica se a função existe no app.js antes de chamar
     if(typeof mudarModoCalculadora === 'function') {
         mudarModoCalculadora('intervalo');
     }
     
+    // 3. Exibe o modal
     document.getElementById('modal-idade').classList.remove('hidden');
 }
 
@@ -30,12 +32,14 @@ function fecharModalFrase() {
 
 // --- Modal Usuário ---
 function abrirModalUsuario() {
+    // Limpa os campos
     document.getElementById('id-user-edit').value = '';
     document.getElementById('nome-novo').value = '';
     document.getElementById('user-novo').value = '';
     document.getElementById('pass-novo').value = '';
     document.getElementById('perfil-novo').value = 'user';
     document.getElementById('ativo-novo').checked = true;
+    
     document.getElementById('modal-user-title').innerText = "Novo Membro";
     document.getElementById('modal-usuario').classList.remove('hidden');
 }
