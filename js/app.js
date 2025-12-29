@@ -187,7 +187,42 @@ function iniciarHeartbeat() { const beat = async () => { await _supabase.from('u
 
 async function updateOnline() { const {data} = await _supabase.from('usuarios').select('username').gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); if(data){ document.getElementById('online-count').innerText = `${data.length} Online`; document.getElementById('online-users-list').innerText = data.map(u=>u.username).join(', '); document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); }}
 
-function toggleChat() { const w = document.getElementById('chat-window'); chatAberto = !chatAberto; w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; if(chatAberto){ document.getElementById('online-users-list').classList.remove('hidden'); const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-orange-500', 'animate-bounce'); btn.classList.add('bg-blue-600'); document.getElementById('badge-unread').classList.add('hidden'); } }
+function toggleChat() { 
+    const w = document.getElementById('chat-window'); 
+    const btn = document.getElementById('chat-toggle-btn');
+    const badge = document.getElementById('badge-unread');
+    
+    chatAberto = !chatAberto; 
+    
+    if(chatAberto){ 
+        // Abrindo
+        w.classList.remove('chat-closed');
+        w.classList.add('chat-open');
+        
+        document.getElementById('online-users-list').classList.remove('hidden'); 
+        
+        // Reset visual do botão e badge
+        btn.classList.remove('bg-orange-500', 'animate-pulse'); 
+        btn.classList.add('bg-blue-600'); 
+        
+        if(badge) {
+            badge.classList.add('hidden');
+            badge.innerText = '0';
+        }
+        
+        // Rola para o fundo ao abrir
+        scrollToBottom();
+        
+        // Foca no input
+        setTimeout(() => document.getElementById('chat-input').focus(), 300);
+
+    } else {
+        // Fechando
+        w.classList.remove('chat-open');
+        w.classList.add('chat-closed');
+        document.getElementById('online-users-list').classList.add('hidden'); 
+    }
+}
 
 function iniciarChat() {
     const container = document.getElementById('chat-messages');
@@ -206,6 +241,7 @@ function iniciarChat() {
             if(container.innerHTML.includes('Conectando')) container.innerHTML = '';
             
             data.forEach(m => addMsg(m, true));
+            scrollToBottom();
         });
 
     // 2. Tenta Conectar via Realtime (WebSocket)
@@ -236,14 +272,29 @@ async function buscarNovasMensagens() {
     }
 }
 
+// Função auxiliar para garantir que vemos a última mensagem
+function scrollToBottom() {
+    const container = document.getElementById('chat-messages');
+    if (!container) return;
+    
+    // Tenta descer imediatamente
+    container.scrollTop = container.scrollHeight;
+
+    // Tenta novamente após 150ms para garantir que imagens carregaram
+    setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+    }, 150);
+}
+
 // 2. Enviar Texto (Otimizado)
 async function enviarMensagemTexto() {
     const input = document.getElementById('chat-input');
-    const texto = input.value.trim();
-    if (!texto) return;
+    const texto = input.value.trim(); // Remove espaços vazios
+    
+    if (!texto) return; // Não envia se vazio
 
-    input.value = ''; 
-    input.focus();
+    input.value = ''; // Limpa UX
+    input.focus(); 
 
     try {
         const { data, error } = await _supabase.from('chat_mensagens').insert([{
@@ -255,14 +306,21 @@ async function enviarMensagemTexto() {
 
         if (error) throw error;
 
-        // Mostra na tela imediatamente (Otimista)
         if (data && data.length > 0) {
             addMsg(data[0], false);
         }
 
     } catch (e) {
         console.error(e);
-        Swal.fire('Erro', 'Não foi possível enviar a mensagem.', 'error');
+        input.value = texto; // Devolve texto em caso de erro
+        Swal.fire({
+            toast: true,
+            position: 'top-end',
+            icon: 'error',
+            title: 'Falha ao enviar.',
+            showConfirmButton: false,
+            timer: 3000
+        });
     }
 }
 
@@ -377,51 +435,82 @@ async function enviarAudioBlob(blob) {
     }
 }
 
-// 5. Renderizar Mensagem (Com Anti-Duplicidade e Atualização de ID)
+// 5. Renderizar Mensagem (Melhorada)
 function addMsg(msg, isHistory) {
-    // 1. Atualiza o ponteiro de última mensagem vista (para o Polling saber onde parou)
+    // 1. Atualiza o ponteiro de última mensagem vista
     if (msg.id > maiorIdMensagem) {
         maiorIdMensagem = msg.id;
     }
 
-    // 2. Prevenção de Duplicidade: Verifica se a msg já existe na tela
+    // 2. Prevenção de Duplicidade
     if (document.getElementById(`msg-${msg.id}`)) return;
 
     const c = document.getElementById('chat-messages');
     const me = msg.usuario === usuarioLogado.username;
-    const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario;
+    // Usa cache ou o próprio username se não houver nome
+    const nomeMostrar = (cacheNomesChat && cacheNomesChat[msg.usuario]) ? cacheNomesChat[msg.usuario] : msg.usuario;
     
     let contentHtml = '';
     
     if (msg.tipo === 'audio' && msg.url_arquivo) {
-        contentHtml = `<audio controls class="w-full max-w-[200px] h-8 mt-1" src="${msg.url_arquivo}"></audio>`;
+        contentHtml = `
+            <div class="flex items-center gap-2">
+                <div class="bg-slate-100 rounded-full p-2 text-slate-500"><i class="fas fa-play"></i></div>
+                <audio controls controlsList="nodownload" class="w-48 h-8" src="${msg.url_arquivo}"></audio>
+            </div>`;
     } else if (msg.tipo === 'arquivo' && msg.url_arquivo) {
         const ext = msg.nome_arquivo ? msg.nome_arquivo.split('.').pop().toLowerCase() : '';
+        
+        // Verifica se é imagem para mostrar preview
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
-            contentHtml = `<a href="${msg.url_arquivo}" target="_blank"><img src="${msg.url_arquivo}" class="max-w-[150px] rounded-lg mt-1 border border-white/20" alt="Imagem"></a>`;
+            // Nota o onload="scrollToBottom()" para ajustar o scroll quando a imagem carregar
+            contentHtml = `
+                <a href="${msg.url_arquivo}" target="_blank" class="block relative group">
+                    <img src="${msg.url_arquivo}" onload="scrollToBottom()" class="max-w-[180px] max-h-[200px] rounded-lg mt-1 border border-black/10 object-cover" alt="Imagem">
+                    <div class="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition rounded-lg"></div>
+                </a>`;
         } else {
-            contentHtml = `<a href="${msg.url_arquivo}" target="_blank" class="flex items-center gap-2 bg-slate-100 p-2 rounded-lg mt-1 hover:bg-slate-200 text-slate-700 no-underline"><i class="fas fa-file-download text-lg text-blue-500"></i><span class="text-xs font-bold underline decoration-dotted truncate max-w-[120px]">${msg.nome_arquivo || 'Arquivo'}</span></a>`;
+            contentHtml = `
+                <a href="${msg.url_arquivo}" target="_blank" class="flex items-center gap-3 bg-slate-50 p-2.5 rounded-xl hover:bg-slate-100 transition border border-slate-100 no-underline group">
+                    <div class="bg-blue-100 text-blue-600 w-8 h-8 rounded-lg flex items-center justify-center group-hover:scale-110 transition"><i class="fas fa-file-download"></i></div>
+                    <div class="flex flex-col overflow-hidden">
+                        <span class="text-xs font-bold text-slate-700 truncate max-w-[120px]">${msg.nome_arquivo || 'Anexo'}</span>
+                        <span class="text-[9px] text-slate-400 uppercase font-bold">Clique para baixar</span>
+                    </div>
+                </a>`;
         }
     } else {
-        contentHtml = `<span>${msg.mensagem}</span>`;
+        // Texto simples com tratamento para quebras de linha
+        contentHtml = `<span class="whitespace-pre-wrap leading-relaxed">${msg.mensagem}</span>`;
     }
 
     const html = `
-        <div id="msg-${msg.id}" class="flex flex-col ${me?'items-end':'items-start'} mb-3 animate-fade-in">
-            <span class="text-[9px] text-gray-400 font-bold ml-1 mb-0.5">${me?'':nomeMostrar}</span>
-            <div class="px-3 py-2 rounded-2xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm flex flex-col">
+        <div id="msg-${msg.id}" class="flex flex-col ${me ? 'items-end' : 'items-start'} mb-4 animate-fade-in group">
+            <span class="text-[10px] text-slate-400 font-extrabold ml-1 mb-1 opacity-0 group-hover:opacity-100 transition-opacity">${me ? 'Você' : nomeMostrar}</span>
+            <div class="px-4 py-2.5 rounded-2xl ${me ? 'bg-blue-600 text-white rounded-tr-sm shadow-blue-200' : 'bg-white border border-slate-100 text-slate-600 rounded-tl-sm shadow-sm'} max-w-[85%] break-words shadow-md text-sm">
                 ${contentHtml}
             </div>
+            <span class="text-[9px] text-slate-300 mt-1 mr-1 hidden group-hover:block transition">${new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
         </div>`;
     
     c.insertAdjacentHTML('beforeend', html);
-    c.scrollTop = c.scrollHeight;
+    
+    // Chama a nossa nova função de scroll
+    scrollToBottom();
 
+    // Notificação de mensagem não lida (Badge)
     if (!isHistory && !chatAberto && !me) {
         const btn = document.getElementById('chat-toggle-btn');
+        const badge = document.getElementById('badge-unread');
+        
         btn.classList.remove('bg-blue-600');
-        btn.classList.add('bg-orange-500', 'animate-bounce');
-        document.getElementById('badge-unread').classList.remove('hidden');
+        btn.classList.add('bg-orange-500', 'animate-pulse'); 
+        
+        if(badge) {
+            badge.classList.remove('hidden');
+            let count = parseInt(badge.innerText) || 0;
+            badge.innerText = count + 1;
+        }
     }
 }
 
