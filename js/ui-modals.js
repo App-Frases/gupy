@@ -5,7 +5,20 @@ function fecharModalCEP() {
     document.getElementById('modal-cep').classList.add('hidden'); 
 }
 
-// --- Modal Idade ---
+// --- Modal Idade (Calculadora) ---
+function abrirModalCalculadora() {
+    // Reseta inputs ao abrir
+    document.getElementById('calc-data-input').value = '';
+    document.getElementById('quick-idade').value = '';
+    
+    // Abre no modo padrão
+    if(typeof mudarModoCalculadora === 'function') {
+        mudarModoCalculadora('intervalo');
+    }
+    
+    document.getElementById('modal-idade').classList.remove('hidden');
+}
+
 function fecharModalIdade() { 
     document.getElementById('modal-idade').classList.add('hidden'); 
 }
@@ -17,7 +30,6 @@ function fecharModalFrase() {
 
 // --- Modal Usuário ---
 function abrirModalUsuario() {
-    // Limpa campos antes de abrir
     document.getElementById('id-user-edit').value = '';
     document.getElementById('nome-novo').value = '';
     document.getElementById('user-novo').value = '';
