@@ -5,6 +5,8 @@ let abaAtiva = 'biblioteca';
 let chatAberto = false;
 let debounceTimer;
 let cacheNomesChat = {}; 
+let mediaRecorder = null;
+let audioChunks = [];
 
 window.onload = function() { 
     try {
@@ -41,7 +43,6 @@ async function fazerLogin() {
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado));
             
-            // Marca o login de hoje para não duplicar na cópia
             localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]); 
             
             if(usuarioLogado.primeiro_acesso) {
@@ -79,7 +80,7 @@ function entrarNoSistema() {
         carregarNomesChat();
         navegar('biblioteca'); 
         iniciarHeartbeat(); 
-        iniciarChat();
+        iniciarChat(); // Inicia o chat robusto
     } catch (error) {
         console.error("Erro entrarNoSistema:", error);
         navegar('biblioteca');
@@ -96,7 +97,6 @@ async function atualizarSenhaPrimeiroAcesso() {
     localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
     document.getElementById('first-access-modal').classList.add('hidden'); 
     
-    // Marca hoje também
     localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]);
     registrarLog('LOGIN', 'Ativou conta e acessou');
     entrarNoSistema();
@@ -172,41 +172,225 @@ function debounceBusca() {
     }, 300); 
 }
 
-// --- Funções de Chat e Header ---
+// --- FUNÇÕES DE CHAT (Arquivos e Voz) ---
+
 async function carregarNomesChat() {
     const { data } = await _supabase.from('usuarios').select('username, nome');
     if(data) data.forEach(u => cacheNomesChat[u.username] = u.nome || u.username);
 }
-function iniciarHeartbeat() { const beat = async () => { await _supabase.from('usuarios').update({ultimo_visto: new Date().toISOString()}).eq('id', usuarioLogado.id); updateOnline(); }; beat(); setInterval(beat, 15000); }
-async function updateOnline() { const {data} = await _supabase.from('usuarios').select('username').gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); if(data){ document.getElementById('online-count').innerText = `${data.length} Online`; document.getElementById('online-users-list').innerText = data.map(u=>u.username).join(', '); document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); }}
-function toggleChat() { const w = document.getElementById('chat-window'); chatAberto = !chatAberto; w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; if(chatAberto){ document.getElementById('online-users-list').classList.remove('hidden'); iniciarChat(); const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-orange-500', 'animate-bounce'); btn.classList.add('bg-blue-600'); document.getElementById('badge-unread').classList.add('hidden'); } }
-function iniciarChat() { _supabase.from('chat_mensagens').select('*').order('created_at',{ascending:true}).limit(50).then(({data})=>{if(data)data.forEach(m => addMsg(m, true))}); _supabase.channel('chat').on('postgres_changes',{event:'INSERT',schema:'public',table:'chat_mensagens'},p=>addMsg(p.new, false)).subscribe(); }
-async function enviarMensagem() { const i = document.getElementById('chat-input'); if(i.value.trim()){ await _supabase.from('chat_mensagens').insert([{usuario:usuarioLogado.username, mensagem:i.value.trim(), perfil:usuarioLogado.perfil}]); i.value=''; } }
-function addMsg(msg, isHistory) { const c = document.getElementById('chat-messages'); const me = msg.usuario === usuarioLogado.username; const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario; c.innerHTML += `<div class="flex flex-col ${me?'items-end':'items-start'} mb-2"><span class="text-[9px] text-gray-400 font-bold ml-1">${me?'':nomeMostrar}</span><div class="px-3 py-2 rounded-xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm">${msg.mensagem}</div></div>`; c.scrollTop = c.scrollHeight; if (!isHistory && !chatAberto && !me) { const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-blue-600'); btn.classList.add('bg-orange-500', 'animate-bounce'); document.getElementById('badge-unread').classList.remove('hidden'); } }
 
-// Funções Header (CEP)
-function buscarCEPHeader() {
-    const val = document.getElementById('quick-cep').value;
-    if(val.length >= 8) { document.getElementById('cep-input').value = val; buscarCEP(); document.getElementById('quick-cep').value = ''; document.getElementById('modal-cep').classList.remove('hidden'); }
+function iniciarHeartbeat() { const beat = async () => { await _supabase.from('usuarios').update({ultimo_visto: new Date().toISOString()}).eq('id', usuarioLogado.id); updateOnline(); }; beat(); setInterval(beat, 15000); }
+
+async function updateOnline() { const {data} = await _supabase.from('usuarios').select('username').gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); if(data){ document.getElementById('online-count').innerText = `${data.length} Online`; document.getElementById('online-users-list').innerText = data.map(u=>u.username).join(', '); document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); }}
+
+function toggleChat() { const w = document.getElementById('chat-window'); chatAberto = !chatAberto; w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; if(chatAberto){ document.getElementById('online-users-list').classList.remove('hidden'); iniciarChat(); const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-orange-500', 'animate-bounce'); btn.classList.add('bg-blue-600'); document.getElementById('badge-unread').classList.add('hidden'); } }
+
+// 1. Inicia o Chat (Carrega msg antigas e liga o Realtime)
+function iniciarChat() {
+    const container = document.getElementById('chat-messages');
+    container.innerHTML = '<div class="text-center text-slate-400 py-4"><i class="fas fa-circle-notch fa-spin"></i> Carregando...</div>';
+
+    // Carrega histórico
+    _supabase.from('chat_mensagens')
+        .select('*')
+        .order('created_at',{ascending:true})
+        .limit(50)
+        .then(({data, error})=>{
+            container.innerHTML = ''; // Limpa loading
+            if(data) data.forEach(m => addMsg(m, true));
+        });
+
+    // Remove subscrições antigas para evitar duplicidade
+    _supabase.removeAllChannels();
+
+    // Inscreve no canal Realtime
+    _supabase.channel('chat-room')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens' }, payload => {
+            addMsg(payload.new, false);
+        })
+        .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+                console.log('Chat conectado!');
+            }
+        });
 }
-async function buscarCEP() {
-    const cep = document.getElementById('cep-input').value.replace(/\D/g, ''); 
-    const resArea = document.getElementById('cep-resultado'); 
-    const loading = document.getElementById('cep-loading');
-    if(cep.length !== 8) return Swal.fire('Atenção', 'Digite um CEP válido', 'warning');
-    resArea.classList.add('hidden'); loading.classList.remove('hidden');
-    try { 
-        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`); 
-        const data = await res.json(); 
-        loading.classList.add('hidden');
-        if(data.erro) return Swal.fire('Não Encontrado', 'CEP não existe', 'info');
-        document.getElementById('cep-logradouro').innerText = data.logradouro || '---'; 
-        document.getElementById('cep-bairro').innerText = data.bairro || '---'; 
-        document.getElementById('cep-localidade').innerText = `${data.localidade}-${data.uf}`;
-        document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
-        resArea.classList.remove('hidden');
-    } catch(e) { loading.classList.add('hidden'); Swal.fire('Erro', 'Falha na conexão', 'error'); }
+
+// 2. Enviar Texto
+async function enviarMensagemTexto() {
+    const input = document.getElementById('chat-input');
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    input.value = ''; // Limpa rápido
+    input.focus();
+
+    await _supabase.from('chat_mensagens').insert([{
+        usuario: usuarioLogado.username,
+        mensagem: texto,
+        perfil: usuarioLogado.perfil,
+        tipo: 'texto'
+    }]);
 }
+
+// 3. Enviar Arquivo (Imagem/PDF/etc)
+async function enviarArquivoSelecionado(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    // Feedback visual
+    const btn = document.querySelector('button[title="Enviar Arquivo"] i');
+    const originalIcon = btn.className;
+    btn.className = "fas fa-circle-notch fa-spin text-blue-500";
+
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Date.now()}_${Math.random()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        // Upload para Storage 'chat-files'
+        const { error: uploadError } = await _supabase.storage.from('chat-files').upload(filePath, file);
+        if (uploadError) throw uploadError;
+
+        // Pega URL pública
+        const { data: publicData } = _supabase.storage.from('chat-files').getPublicUrl(filePath);
+        const publicUrl = publicData.publicUrl;
+
+        // Insere mensagem
+        await _supabase.from('chat_mensagens').insert([{
+            usuario: usuarioLogado.username,
+            mensagem: file.name, // Texto de fallback
+            perfil: usuarioLogado.perfil,
+            tipo: 'arquivo',
+            url_arquivo: publicUrl,
+            nome_arquivo: file.name
+        }]);
+
+        input.value = ''; // Limpa input
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Erro', 'Falha ao enviar arquivo', 'error');
+    } finally {
+        btn.className = originalIcon;
+    }
+}
+
+// 4. Gravação de Voz
+async function toggleGravacao() {
+    if (!mediaRecorder || mediaRecorder.state === 'inactive') {
+        iniciarGravacao();
+    } else {
+        pararGravacao();
+    }
+}
+
+async function iniciarGravacao() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorder = new MediaRecorder(stream);
+        audioChunks = [];
+
+        mediaRecorder.ondataavailable = event => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/mp3' });
+            enviarAudioBlob(audioBlob);
+            
+            // Para as tracks para soltar o microfone
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        document.getElementById('recording-overlay').classList.remove('hidden');
+    } catch (e) {
+        console.error(e);
+        Swal.fire('Erro', 'Permissão de microfone negada.', 'warning');
+    }
+}
+
+function pararGravacao() {
+    if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        document.getElementById('recording-overlay').classList.add('hidden');
+    }
+}
+
+async function enviarAudioBlob(blob) {
+    const fileName = `audio_${Date.now()}.mp3`;
+    
+    try {
+        const { error: uploadError } = await _supabase.storage.from('chat-files').upload(fileName, blob);
+        if (uploadError) throw uploadError;
+
+        const { data: publicData } = _supabase.storage.from('chat-files').getPublicUrl(fileName);
+        
+        await _supabase.from('chat_mensagens').insert([{
+            usuario: usuarioLogado.username,
+            mensagem: 'Mensagem de Voz',
+            perfil: usuarioLogado.perfil,
+            tipo: 'audio',
+            url_arquivo: publicData.publicUrl
+        }]);
+    } catch (e) {
+        console.error("Erro upload audio:", e);
+    }
+}
+
+// 5. Renderizar Mensagem (Com suporte a Tipos)
+function addMsg(msg, isHistory) {
+    const c = document.getElementById('chat-messages');
+    const me = msg.usuario === usuarioLogado.username;
+    const nomeMostrar = cacheNomesChat[msg.usuario] || msg.usuario;
+    
+    // Tratamento de tipos
+    let contentHtml = '';
+    
+    if (msg.tipo === 'audio' && msg.url_arquivo) {
+        // PLAYER DE ÁUDIO
+        contentHtml = `
+            <audio controls class="w-full max-w-[200px] h-8 mt-1" src="${msg.url_arquivo}"></audio>
+        `;
+    } else if (msg.tipo === 'arquivo' && msg.url_arquivo) {
+        // IMAGEM ou ARQUIVO
+        const ext = msg.nome_arquivo ? msg.nome_arquivo.split('.').pop().toLowerCase() : '';
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(ext)) {
+            contentHtml = `
+                <a href="${msg.url_arquivo}" target="_blank">
+                    <img src="${msg.url_arquivo}" class="max-w-[150px] rounded-lg mt-1 border border-white/20" alt="Imagem">
+                </a>`;
+        } else {
+            contentHtml = `
+                <a href="${msg.url_arquivo}" target="_blank" class="flex items-center gap-2 bg-slate-100 p-2 rounded-lg mt-1 hover:bg-slate-200 text-slate-700 no-underline">
+                    <i class="fas fa-file-download text-lg text-blue-500"></i>
+                    <span class="text-xs font-bold underline decoration-dotted truncate max-w-[120px]">${msg.nome_arquivo || 'Arquivo'}</span>
+                </a>`;
+        }
+    } else {
+        // TEXTO PADRÃO
+        contentHtml = `<span>${msg.mensagem}</span>`;
+    }
+
+    const html = `
+        <div class="flex flex-col ${me?'items-end':'items-start'} mb-3 animate-fade-in">
+            <span class="text-[9px] text-gray-400 font-bold ml-1 mb-0.5">${me?'':nomeMostrar}</span>
+            <div class="px-3 py-2 rounded-2xl ${me?'bg-blue-600 text-white rounded-br-none':'bg-white border border-gray-200 text-gray-700 rounded-bl-none'} max-w-[85%] break-words shadow-sm flex flex-col">
+                ${contentHtml}
+            </div>
+        </div>`;
+    
+    c.insertAdjacentHTML('beforeend', html);
+    c.scrollTop = c.scrollHeight;
+
+    if (!isHistory && !chatAberto && !me) {
+        const btn = document.getElementById('chat-toggle-btn');
+        btn.classList.remove('bg-blue-600');
+        btn.classList.add('bg-orange-500', 'animate-bounce');
+        document.getElementById('badge-unread').classList.remove('hidden');
+    }
+}
+
+// --- FIM FUNÇÕES CHAT ---
 
 // --- CALCULADORA UNIVERSAL ---
 let modoCalculadora = 'intervalo'; // 'intervalo' ou 'soma'
@@ -335,4 +519,8 @@ function calcularModoSoma(dataBase) {
     // Exibe
     document.getElementById('resultado-soma').classList.remove('hidden');
     document.getElementById('resultado-intervalo').classList.add('hidden');
+}
+
+function calcularIdadeHeader() {
+    abrirModalCalculadora();
 }
