@@ -41,6 +41,7 @@ async function fazerLogin() {
             usuarioLogado = usuario; 
             localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado));
             
+            // Marca o login de hoje para não duplicar na cópia
             localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]); 
             
             if(usuarioLogado.primeiro_acesso) {
@@ -95,6 +96,7 @@ async function atualizarSenhaPrimeiroAcesso() {
     localStorage.setItem('gupy_session', JSON.stringify(usuarioLogado)); 
     document.getElementById('first-access-modal').classList.add('hidden'); 
     
+    // Marca hoje também
     localStorage.setItem('gupy_ultimo_login_diario', new Date().toISOString().split('T')[0]);
     registrarLog('LOGIN', 'Ativou conta e acessou');
     entrarNoSistema();
@@ -283,7 +285,7 @@ function calcularModoSoma(dataBase) {
     const dataFutura = new Date(dataBase);
     dataFutura.setDate(dataFutura.getDate() + diasParaSomar);
 
-    // 2. Comparações (Zerando horas para evitar erros)
+    // 2. Prepara variáveis para comparação (Zerando horas para evitar erros)
     const hoje = new Date();
     hoje.setHours(0,0,0,0);
     
@@ -333,10 +335,4 @@ function calcularModoSoma(dataBase) {
     // Exibe
     document.getElementById('resultado-soma').classList.remove('hidden');
     document.getElementById('resultado-intervalo').classList.add('hidden');
-}
-
-// Função para abrir pelo Header (Substituindo a antiga input lógica)
-function calcularIdadeHeader() {
-    // Mantido por compatibilidade caso algum input antigo exista, mas agora usamos abrirModalCalculadora
-    abrirModalCalculadora();
 }
