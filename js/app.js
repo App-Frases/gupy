@@ -8,6 +8,10 @@ let cacheNomesChat = {};
 let mediaRecorder = null;
 let audioChunks = [];
 
+// Variáveis para controle do Chat (Polling/Realtime)
+let pollingInterval = null; 
+let maiorIdMensagem = 0; // Guarda o ID da última mensagem vista
+
 window.onload = function() { 
     try {
         const s = localStorage.getItem('gupy_session'); 
@@ -172,7 +176,7 @@ function debounceBusca() {
     }, 300); 
 }
 
-// --- FUNÇÕES DE CHAT (Robustas & Otimistas) ---
+// --- FUNÇÕES DE CHAT (Híbrido: Realtime + Polling de Segurança) ---
 
 async function carregarNomesChat() {
     const { data } = await _supabase.from('usuarios').select('username, nome');
@@ -183,15 +187,15 @@ function iniciarHeartbeat() { const beat = async () => { await _supabase.from('u
 
 async function updateOnline() { const {data} = await _supabase.from('usuarios').select('username').gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); if(data){ document.getElementById('online-count').innerText = `${data.length} Online`; document.getElementById('online-users-list').innerText = data.map(u=>u.username).join(', '); document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); }}
 
-function toggleChat() { const w = document.getElementById('chat-window'); chatAberto = !chatAberto; w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; if(chatAberto){ document.getElementById('online-users-list').classList.remove('hidden'); iniciarChat(); const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-orange-500', 'animate-bounce'); btn.classList.add('bg-blue-600'); document.getElementById('badge-unread').classList.add('hidden'); } }
+function toggleChat() { const w = document.getElementById('chat-window'); chatAberto = !chatAberto; w.className = chatAberto ? "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-open" : "absolute bottom-16 right-0 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col chat-widget chat-closed"; if(chatAberto){ document.getElementById('online-users-list').classList.remove('hidden'); const btn = document.getElementById('chat-toggle-btn'); btn.classList.remove('bg-orange-500', 'animate-bounce'); btn.classList.add('bg-blue-600'); document.getElementById('badge-unread').classList.add('hidden'); } }
 
 function iniciarChat() {
     const container = document.getElementById('chat-messages');
-    // Carrega histórico apenas se estiver vazio ou recarregando
     if(container.innerHTML === '') {
         container.innerHTML = '<div class="text-center text-slate-400 py-4"><i class="fas fa-circle-notch fa-spin"></i> Conectando...</div>';
     }
 
+    // 1. Carrega Histórico Inicial
     _supabase.from('chat_mensagens')
         .select('*')
         .order('created_at',{ascending:true})
@@ -204,17 +208,35 @@ function iniciarChat() {
             data.forEach(m => addMsg(m, true));
         });
 
+    // 2. Tenta Conectar via Realtime (WebSocket)
     _supabase.removeAllChannels();
-
     _supabase.channel('chat-room')
         .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_mensagens' }, payload => {
-            // Só adiciona se já não estiver na tela (Evita duplicidade)
             addMsg(payload.new, false);
         })
         .subscribe();
+
+    // 3. ATIVA O POLLING (Plano B - Verifica a cada 3 segundos)
+    if (pollingInterval) clearInterval(pollingInterval);
+    pollingInterval = setInterval(buscarNovasMensagens, 3000);
 }
 
-// 2. Enviar Texto (Otimizado: Mostra na tela na hora)
+// Função Auxiliar de Polling (Busca mensagens que o WebSocket perdeu)
+async function buscarNovasMensagens() {
+    if (maiorIdMensagem === 0) return; // Espera carregar o histórico primeiro
+
+    const { data } = await _supabase
+        .from('chat_mensagens')
+        .select('*')
+        .gt('id', maiorIdMensagem) // Só traz mensagens novas (ID maior que o último)
+        .order('created_at', { ascending: true });
+
+    if (data && data.length > 0) {
+        data.forEach(m => addMsg(m, false));
+    }
+}
+
+// 2. Enviar Texto (Otimizado)
 async function enviarMensagemTexto() {
     const input = document.getElementById('chat-input');
     const texto = input.value.trim();
@@ -224,7 +246,6 @@ async function enviarMensagemTexto() {
     input.focus();
 
     try {
-        // Usa .select() para receber o objeto criado de volta
         const { data, error } = await _supabase.from('chat_mensagens').insert([{
             usuario: usuarioLogado.username,
             mensagem: texto,
@@ -234,8 +255,7 @@ async function enviarMensagemTexto() {
 
         if (error) throw error;
 
-        // Atualização Otimista: Se salvou no banco, mostra na tela
-        // (Isso resolve o problema do WebSocket travado)
+        // Mostra na tela imediatamente (Otimista)
         if (data && data.length > 0) {
             addMsg(data[0], false);
         }
@@ -246,7 +266,7 @@ async function enviarMensagemTexto() {
     }
 }
 
-// 3. Enviar Arquivo (Otimizado)
+// 3. Enviar Arquivo
 async function enviarArquivoSelecionado(input) {
     const file = input.files[0];
     if (!file) return;
@@ -276,7 +296,6 @@ async function enviarArquivoSelecionado(input) {
 
         if (msgError) throw msgError;
 
-        // Mostra na tela imediatamente
         if (msgData && msgData.length > 0) {
             addMsg(msgData[0], false);
         }
@@ -290,7 +309,7 @@ async function enviarArquivoSelecionado(input) {
     }
 }
 
-// 4. Gravação de Voz (Otimizada)
+// 4. Gravação de Voz
 async function toggleGravacao() {
     if (!mediaRecorder || mediaRecorder.state === 'inactive') {
         iniciarGravacao();
@@ -349,7 +368,6 @@ async function enviarAudioBlob(blob) {
 
         if (msgError) throw msgError;
 
-        // Mostra na tela imediatamente
         if (msgData && msgData.length > 0) {
             addMsg(msgData[0], false);
         }
@@ -359,9 +377,14 @@ async function enviarAudioBlob(blob) {
     }
 }
 
-// 5. Renderizar Mensagem (Com Anti-Duplicidade)
+// 5. Renderizar Mensagem (Com Anti-Duplicidade e Atualização de ID)
 function addMsg(msg, isHistory) {
-    // 1. Prevenção de Duplicidade: Verifica se a msg já existe na tela pelo ID
+    // 1. Atualiza o ponteiro de última mensagem vista (para o Polling saber onde parou)
+    if (msg.id > maiorIdMensagem) {
+        maiorIdMensagem = msg.id;
+    }
+
+    // 2. Prevenção de Duplicidade: Verifica se a msg já existe na tela
     if (document.getElementById(`msg-${msg.id}`)) return;
 
     const c = document.getElementById('chat-messages');
@@ -383,7 +406,6 @@ function addMsg(msg, isHistory) {
         contentHtml = `<span>${msg.mensagem}</span>`;
     }
 
-    // Adicionado ID único no wrapper para controle de duplicidade
     const html = `
         <div id="msg-${msg.id}" class="flex flex-col ${me?'items-end':'items-start'} mb-3 animate-fade-in">
             <span class="text-[9px] text-gray-400 font-bold ml-1 mb-0.5">${me?'':nomeMostrar}</span>
@@ -404,10 +426,10 @@ function addMsg(msg, isHistory) {
 }
 
 // --- CALCULADORA UNIVERSAL ---
-let modoCalculadora = 'intervalo'; 
-
 function mudarModoCalculadora(modo) {
-    modoCalculadora = modo;
+    if(typeof window.modoCalculadora !== 'undefined') window.modoCalculadora = modo;
+    else modoCalculadora = modo; 
+    
     const btnIntervalo = document.getElementById('btn-mode-intervalo');
     const btnSoma = document.getElementById('btn-mode-soma');
     
@@ -434,7 +456,10 @@ function processarCalculadora() {
     const dataBase = new Date(parts[2], parts[1]-1, parts[0]);
     if (isNaN(dataBase.getTime())) return Swal.fire('Erro', 'Data inválida', 'error');
 
-    if (modoCalculadora === 'intervalo') {
+    // Verifica modo (compatível com var global ou local)
+    const modo = (typeof window.modoCalculadora !== 'undefined') ? window.modoCalculadora : 'intervalo';
+
+    if (modo === 'intervalo') {
         calcularModoIntervalo(dataBase, valData);
     } else {
         calcularModoSoma(dataBase);
