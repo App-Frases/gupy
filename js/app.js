@@ -176,6 +176,52 @@ function debounceBusca() {
     }, 300); 
 }
 
+// --- FUNÇÕES DE CEP (NOVAS) ---
+async function buscarCEP() {
+    const input = document.getElementById('cep-input');
+    const cep = input.value.replace(/\D/g, '');
+    
+    if(cep.length !== 8) return Swal.fire('Atenção', 'CEP deve conter 8 dígitos.', 'warning');
+    
+    document.getElementById('cep-loading').classList.remove('hidden');
+    document.getElementById('cep-resultado').classList.add('hidden');
+    
+    try {
+        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const data = await res.json();
+        
+        if(data.erro) throw new Error('CEP não encontrado.');
+        
+        document.getElementById('cep-logradouro').innerText = data.logradouro;
+        document.getElementById('cep-bairro').innerText = data.bairro;
+        document.getElementById('cep-localidade').innerText = `${data.localidade} - ${data.uf}`;
+        document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
+        
+        document.getElementById('cep-resultado').classList.remove('hidden');
+    } catch (error) {
+        Swal.fire('Erro', error.message || 'Falha ao buscar CEP', 'error');
+    } finally {
+        document.getElementById('cep-loading').classList.add('hidden');
+    }
+}
+
+function buscarCEPHeader() {
+    const input = document.getElementById('quick-cep');
+    const cep = input.value.replace(/\D/g, '');
+    
+    if(cep.length !== 8) return Swal.fire('Atenção', 'CEP deve conter 8 dígitos.', 'warning');
+    
+    // Abre o modal de CEP e preenche
+    const modal = document.getElementById('modal-cep');
+    if(modal) {
+        modal.classList.remove('hidden');
+        const inputModal = document.getElementById('cep-input');
+        inputModal.value = cep;
+        buscarCEP(); // Chama a busca automática
+        input.value = ''; // Limpa o header
+    }
+}
+
 // --- FUNÇÕES DE CHAT (Híbrido: Realtime + Polling de Segurança) ---
 
 async function carregarNomesChat() {
@@ -259,16 +305,21 @@ function iniciarChat() {
 
 // Função Auxiliar de Polling (Busca mensagens que o WebSocket perdeu)
 async function buscarNovasMensagens() {
-    if (maiorIdMensagem === 0) return; // Espera carregar o histórico primeiro
+    // CORREÇÃO: Removemos a trava 'if (maiorIdMensagem === 0) return;'
+    // Isso garante que se o chat estiver vazio ou o Realtime falhar, ele busque as primeiras mensagens.
 
-    const { data } = await _supabase
-        .from('chat_mensagens')
-        .select('*')
-        .gt('id', maiorIdMensagem) // Só traz mensagens novas (ID maior que o último)
-        .order('created_at', { ascending: true });
+    try {
+        const { data } = await _supabase
+            .from('chat_mensagens')
+            .select('*')
+            .gt('id', maiorIdMensagem) // Só traz mensagens novas
+            .order('created_at', { ascending: true });
 
-    if (data && data.length > 0) {
-        data.forEach(m => addMsg(m, false));
+        if (data && data.length > 0) {
+            data.forEach(m => addMsg(m, false));
+        }
+    } catch (e) {
+        console.error("Erro no polling do chat:", e);
     }
 }
 
