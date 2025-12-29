@@ -176,7 +176,7 @@ function debounceBusca() {
     }, 300); 
 }
 
-// --- FUNÇÕES DE CEP (NOVAS) ---
+// --- FUNÇÕES DE CEP ---
 async function buscarCEP() {
     const input = document.getElementById('cep-input');
     const cep = input.value.replace(/\D/g, '');
@@ -231,7 +231,21 @@ async function carregarNomesChat() {
 
 function iniciarHeartbeat() { const beat = async () => { await _supabase.from('usuarios').update({ultimo_visto: new Date().toISOString()}).eq('id', usuarioLogado.id); updateOnline(); }; beat(); setInterval(beat, 15000); }
 
-async function updateOnline() { const {data} = await _supabase.from('usuarios').select('username').gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); if(data){ document.getElementById('online-count').innerText = `${data.length} Online`; document.getElementById('online-users-list').innerText = data.map(u=>u.username).join(', '); document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); }}
+// --- ATUALIZAÇÃO AQUI ---
+// Agora procuramos 'username, nome' e exibimos o nome na lista
+async function updateOnline() { 
+    const {data} = await _supabase
+        .from('usuarios')
+        .select('username, nome') // Busca também o nome
+        .gt('ultimo_visto', new Date(Date.now()-60000).toISOString()); 
+    
+    if(data){ 
+        document.getElementById('online-count').innerText = `${data.length} Online`; 
+        // Exibe o nome ou, se não houver, o username
+        document.getElementById('online-users-list').innerText = data.map(u => u.nome || u.username).join(', '); 
+        document.getElementById('badge-online').classList.toggle('hidden', data.length<=1); 
+    }
+}
 
 function toggleChat() { 
     const w = document.getElementById('chat-window'); 
@@ -305,9 +319,6 @@ function iniciarChat() {
 
 // Função Auxiliar de Polling (Busca mensagens que o WebSocket perdeu)
 async function buscarNovasMensagens() {
-    // CORREÇÃO: Removemos a trava 'if (maiorIdMensagem === 0) return;'
-    // Isso garante que se o chat estiver vazio ou o Realtime falhar, ele busque as primeiras mensagens.
-
     try {
         const { data } = await _supabase
             .from('chat_mensagens')
