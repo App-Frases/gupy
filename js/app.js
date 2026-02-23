@@ -176,30 +176,37 @@ function debounceBusca() {
     }, 300); 
 }
 
-// --- FUNÇÕES DE CEP ---
+// --- FUNÇÕES DE CEP (CORRIGIDO CORS) ---
 async function buscarCEP() {
     const input = document.getElementById('cep-input');
     const cep = input.value.replace(/\D/g, '');
     
-    if(cep.length !== 8) return Swal.fire('Atenção', 'CEP deve conter 8 dígitos.', 'warning');
+    if(cep.length !== 8) {
+        return Swal.fire('Atenção', 'O CEP deve conter exatamente 8 dígitos.', 'warning');
+    }
     
     document.getElementById('cep-loading').classList.remove('hidden');
     document.getElementById('cep-resultado').classList.add('hidden');
     
     try {
-        const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+        const res = await fetch(`https://brasilapi.com.br/api/cep/v1/${cep}`);
+        
+        if (!res.ok) {
+            if (res.status === 404) throw new Error('CEP não encontrado na base de dados.');
+            throw new Error('Falha na comunicação com a API de CEP.');
+        }
+
         const data = await res.json();
         
-        if(data.erro) throw new Error('CEP não encontrado.');
-        
-        document.getElementById('cep-logradouro').innerText = data.logradouro;
-        document.getElementById('cep-bairro').innerText = data.bairro;
-        document.getElementById('cep-localidade').innerText = `${data.localidade} - ${data.uf}`;
+        document.getElementById('cep-logradouro').innerText = data.street || 'Não informado';
+        document.getElementById('cep-bairro').innerText = data.neighborhood || 'Não informado';
+        document.getElementById('cep-localidade').innerText = `${data.city} - ${data.state}`;
         document.getElementById('cep-display-num').innerText = cep.replace(/^(\d{5})(\d{3})/, "$1-$2");
         
         document.getElementById('cep-resultado').classList.remove('hidden');
     } catch (error) {
-        Swal.fire('Erro', error.message || 'Falha ao buscar CEP', 'error');
+        console.error("[SecOps/QA] Erro ao buscar CEP:", error);
+        Swal.fire('Erro', error.message || 'Falha inesperada ao buscar o CEP.', 'error');
     } finally {
         document.getElementById('cep-loading').classList.add('hidden');
     }
